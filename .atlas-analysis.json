@@ -1,0 +1,146 @@
+{
+  "projectType": "framework",
+  "projectName": "Hyperbolic AgentKit",
+  "projectDescription": "A comprehensive AI agent framework for building autonomous agents with GPU compute, blockchain, social media, and content generation capabilities",
+  "theme": "aspen",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/agents",
+              "concepts/tools",
+              "concepts/character-configuration"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/setup-environment",
+              "guides/running-agents",
+              "guides/creating-custom-tools",
+              "guides/working-with-knowledge-bases"
+            ]
+          },
+          {
+            "group": "Agent Types",
+            "pages": [
+              "agents/chat-agent",
+              "agents/voice-agent",
+              "agents/twitter-automation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Tools & Integrations",
+        "groups": [
+          {
+            "group": "Hyperbolic Tools",
+            "pages": [
+              "tools/hyperbolic/overview",
+              "tools/hyperbolic/rent-compute",
+              "tools/hyperbolic/manage-gpus",
+              "tools/hyperbolic/ssh-access"
+            ]
+          },
+          {
+            "group": "Blockchain Tools",
+            "pages": [
+              "tools/blockchain/overview",
+              "tools/blockchain/wallet-management",
+              "tools/blockchain/token-operations"
+            ]
+          },
+          {
+            "group": "Social Media Tools",
+            "pages": [
+              "tools/social/twitter-operations",
+              "tools/social/twitter-knowledge-base"
+            ]
+          },
+          {
+            "group": "Content & Automation",
+            "pages": [
+              "tools/content/writing-agent",
+              "tools/content/podcast-agent",
+              "tools/content/browser-automation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Actions",
+            "pages": [
+              "api/hyperbolic/rent-compute",
+              "api/hyperbolic/get-available-gpus",
+              "api/hyperbolic/get-gpu-status",
+              "api/hyperbolic/terminate-compute",
+              "api/hyperbolic/ssh-access",
+              "api/hyperbolic/remote-shell",
+              "api/hyperbolic/get-spend-history",
+              "api/hyperbolic/get-current-balance",
+              "api/hyperbolic/link-wallet-address"
+            ]
+          },
+          {
+            "group": "Agent Configuration",
+            "pages": [
+              "api/configuration/agent-initialization",
+              "api/configuration/character-schema",
+              "api/configuration/environment-variables"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "GPU compute resource management via Hyperbolic API",
+    "Blockchain operations with CDP integration (wallets, tokens, smart contracts)",
+    "Twitter/X automation with knowledge base integration",
+    "AI-powered content generation and research (Writing Agent)",
+    "Podcast processing and transcription capabilities",
+    "Browser automation for web interactions",
+    "Multi-modal agent interfaces (chat, voice, autonomous)",
+    "Customizable character personalities and behaviors",
+    "LangChain and LangGraph integration for agent orchestration"
+  ],
+  "publicApiSurface": [
+    "rent_compute(cluster_name, node_name, gpu_count)",
+    "get_available_gpus()",
+    "get_gpu_status()",
+    "terminate_compute(instance_id)",
+    "ssh_access(instance_id)",
+    "remote_shell(instance_id, command)",
+    "get_spend_history()",
+    "get_current_balance()",
+    "link_wallet_address(wallet_address)",
+    "HyperbolicToolkit.from_hyperbolic_agentkit_wrapper()",
+    "create_agent_tools(llm, knowledge_base, podcast_knowledge_base, agent_kit, config)",
+    "initialize_agent()",
+    "WritingTool",
+    "BrowserToolkit",
+    "TweetKnowledgeBase",
+    "PodcastKnowledgeBase",
+    "TwitterClient"
+  ]
+}
