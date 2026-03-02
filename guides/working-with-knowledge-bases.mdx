@@ -1,0 +1,750 @@
+---
+title: "Working with Knowledge Bases"
+description: "Set up and use Twitter and Podcast knowledge bases to enhance your agent's contextual awareness and response quality"
+---
+
+## Overview
+
+Hyperbolic AgentKit includes two powerful knowledge base systems that use vector embeddings to provide contextual information to your agents:
+
+1. **Twitter Knowledge Base** - Scrapes and indexes tweets from key opinion leaders (KOLs)
+2. **Podcast Knowledge Base** - Indexes podcast transcripts for accurate Q&A
+
+Both use ChromaDB for vector storage and Sentence Transformers for embeddings.
+
+## Architecture
+
+Both knowledge bases share a common architecture:
+
+<Steps>
+  <Step title="Data Collection">
+    - Twitter KB: Fetches tweets via Twitter API
+    - Podcast KB: Processes JSON transcript files
+  </Step>
+
+  <Step title="Embedding Generation">
+    Uses `all-mpnet-base-v2` model from Sentence Transformers for high-quality embeddings
+  </Step>
+
+  <Step title="Vector Storage">
+    Stores embeddings in ChromaDB with persistent storage in `./chroma_db`
+  </Step>
+
+  <Step title="Semantic Search">
+    Queries return most relevant content based on similarity scores
+  </Step>
+</Steps>
+
+## Twitter Knowledge Base
+
+The Twitter KB indexes tweets from influential accounts to help your agent understand current discussions and trends.
+
+### Setup
+
+<Steps>
+  <Step title="Configure Twitter API Credentials">
+    Set all required Twitter API keys in `.env`:
+
+    ```bash .env
+    TWITTER_ACCESS_TOKEN=your_access_token
+    TWITTER_API_KEY=your_api_key
+    TWITTER_API_SECRET=your_api_secret
+    TWITTER_ACCESS_TOKEN_SECRET=your_token_secret
+    TWITTER_BEARER_TOKEN=your_bearer_token
+    TWITTER_CLIENT_ID=your_client_id
+    TWITTER_CLIENT_SECRET=your_client_secret
+    ```
+  </Step>
+
+  <Step title="Enable Twitter Knowledge Base">
+    ```bash .env
+    USE_TWITTER_KNOWLEDGE_BASE=true
+    ```
+  </Step>
+
+  <Step title="Configure KOL List">
+    Edit your character file to include KOLs to track:
+
+    ```json characters/my-character.json
+    {
+      "name": "MyAgent",
+      "kol_list": [
+        {
+          "username": "vitalikbuterin",
+          "user_id": "295218901"
+        },
+        {
+          "username": "elonmusk",
+          "user_id": "44196397"
+        },
+        {
+          "username": "aixbt_agent",
+          "user_id": "1852674305517342720"
+        }
+      ]
+    }
+    ```
+
+    <Note>
+      Get user IDs using the Twitter API or tools like tweeterid.com
+    </Note>
+  </Step>
+</Steps>
+
+### Initialization
+
+From `chatbot.py:481-560`, the knowledge base is initialized interactively:
+
+```bash
+Do you want to initialize the Twitter knowledge base? (y/n): y
+
+Do you want to clear the existing Twitter knowledge base? (y/n): y
+Knowledge base cleared
+
+Do you want to update the Twitter knowledge base with KOL tweets? (y/n): y
+
+=== Starting Twitter Knowledge Base Update ===
+Found 5 KOLs in character config
+Selected 5 KOLs for processing
+...
+```
+
+### Implementation Details
+
+From `twitter_agent/twitter_knowledge_base.py:22-169`:
+
+```python twitter_agent/twitter_knowledge_base.py
+from sentence_transformers import SentenceTransformer
+import chromadb
+
+class TweetKnowledgeBase:
+    def __init__(self, collection_name: str = "twitter_knowledge"):
+        # Initialize ChromaDB with persistence
+        self.client = chromadb.PersistentClient(path="./chroma_db")
+        
+        # Use advanced embedding model
+        self.embedding_model = SentenceTransformer('all-mpnet-base-v2')
+        
+        # Create embedding function
+        class EmbeddingFunction:
+            def __init__(self, model):
+                self.model = model
+            
+            def __call__(self, input: List[str]) -> List[List[float]]:
+                embeddings = self.model.encode(input)
+                return embeddings.tolist()
+        
+        embedding_func = EmbeddingFunction(self.embedding_model)
+        
+        # Create or get collection
+        self.collection = self.client.get_or_create_collection(
+            name=collection_name,
+            embedding_function=embedding_func
+        )
+
+    def add_tweets(self, tweets: List[Tweet]):
+        """Add tweets to the knowledge base."""
+        documents = [tweet.text for tweet in tweets]
+        ids = [tweet.id for tweet in tweets]
+        metadata = [
+            {
+                "author_id": tweet.author_id,
+                "created_at": tweet.created_at,
+            }
+            for tweet in tweets
+        ]
+        
+        self.collection.add(
+            documents=documents,
+            ids=ids,
+            metadatas=metadata
+        )
+
+    def query_knowledge_base(self, query: str, n_results: int = 10) -> List[Dict]:
+        """Query the knowledge base for relevant tweets."""
+        results = self.collection.query(
+            query_texts=[query],
+            n_results=n_results
+        )
+        
+        formatted_results = []
+        for doc, metadata, distance in zip(
+            results['documents'][0], 
+            results['metadatas'][0],
+            results['distances'][0]
+        ):
+            formatted_results.append({
+                "text": doc,
+                "metadata": metadata,
+                "relevance_score": 1 - distance  # Convert distance to similarity
+            })
+        
+        return sorted(formatted_results, key=lambda x: x['relevance_score'], reverse=True)
+```
+
+### Update Process
+
+From `twitter_agent/twitter_knowledge_base.py:170-340`, the update function:
+
+```python twitter_agent/twitter_knowledge_base.py
+async def update_knowledge_base(twitter_client: TwitterClient, knowledge_base, kol_list: List[Dict]):
+    """Update the knowledge base with recent tweets from top KOLs."""
+    TOP_KOLS = 5
+    TWEETS_PER_KOL = 15
+    REQUEST_DELAY = 5
+    
+    # Select random sample of KOLs
+    selected_kols = random.sample(kol_list, min(TOP_KOLS, len(kol_list)))
+    
+    # Clear existing knowledge base
+    knowledge_base.clear_collection()
+    
+    # Process each selected KOL
+    for kol in selected_kols:
+        tweets = await twitter_client.get_user_tweets(
+            user_id=kol['user_id'],
+            max_results=TWEETS_PER_KOL
+        )
+        
+        if tweets:
+            knowledge_base.add_tweets(tweets)
+        
+        # Rate limiting
+        await asyncio.sleep(REQUEST_DELAY)
+```
+
+**Configuration Constants**:
+- `TOP_KOLS = 5` - Number of KOLs to sample per update
+- `TWEETS_PER_KOL = 15` - Maximum tweets to fetch per KOL
+- `REQUEST_DELAY = 5` - Seconds between API calls (rate limiting)
+
+### Querying Twitter KB
+
+The knowledge base is registered as a tool in `chatbot.py:304-308`:
+
+```python chatbot.py
+if os.getenv("USE_TWITTER_KNOWLEDGE_BASE", "true").lower() == "true" and knowledge_base is not None:
+    tools.append(Tool(
+        name="query_twitter_knowledge_base",
+        description="""Query the Twitter knowledge base for insights from key opinion leaders.
+        Returns relevant tweets that match your query.
+        Use this to understand current discussions, trends, and opinions from influential accounts.
+        
+        Example: query_twitter_knowledge_base("latest developments in AI")
+        """,
+        func=lambda query: knowledge_base.query_knowledge_base(query)
+    ))
+```
+
+### Usage in Agents
+
+The agent can query the knowledge base naturally:
+
+```
+User: What are KOLs saying about Ethereum scaling?
+
+Agent: [Queries Twitter KB with "Ethereum scaling solutions"]
+
+AI: Based on recent tweets from key opinion leaders, there's discussion about:
+- Vitalik mentioned progress on Proto-Danksharding
+- Several KOLs are excited about Layer 2 adoption metrics
+...
+```
+
+## Podcast Knowledge Base
+
+The Podcast KB indexes transcript files for accurate question-answering about podcast content.
+
+### Setup
+
+<Steps>
+  <Step title="Enable Podcast Knowledge Base">
+    ```bash .env
+    USE_PODCAST_KNOWLEDGE_BASE=true
+    ```
+  </Step>
+
+  <Step title="Prepare Transcript Files">
+    Create JSON transcript files in the format:
+
+    ```json youtube_scraper/jsonoutputs/episode-001.json
+    [
+      {
+        "speaker": "Host",
+        "content": "Welcome to today's episode about blockchain technology..."
+      },
+      {
+        "speaker": "Guest",
+        "content": "Thanks for having me. I'm excited to discuss..."
+      }
+    ]
+    ```
+
+    The default directory is `youtube_scraper/jsonoutputs/`
+  </Step>
+
+  <Step title="Initialize Knowledge Base">
+    When starting the agent:
+
+    ```bash
+    Do you want to initialize the Podcast knowledge base? (y/n): y
+    
+    Podcast knowledge base initialized successfully
+    Current podcast knowledge base stats: {'count': 0, 'last_update': ...}
+    Checking for new podcast transcripts...
+    Found 3 new JSON files to process
+    Added 245 segments to knowledge base
+    ```
+  </Step>
+</Steps>
+
+### Implementation Details
+
+From `podcast_agent/podcast_knowledge_base.py:17-228`:
+
+```python podcast_agent/podcast_knowledge_base.py
+from pydantic import BaseModel
+
+class PodcastSegment(BaseModel):
+    id: str
+    speaker: str
+    content: str
+    source_file: str
+    timestamp: str = None
+
+class PodcastKnowledgeBase:
+    def __init__(self, collection_name: str = "podcast_knowledge"):
+        # Initialize ChromaDB with persistence
+        self.client = chromadb.PersistentClient(path="./chroma_db")
+        
+        # Use same embedding model as Twitter KB
+        self.embedding_model = SentenceTransformer('all-mpnet-base-v2')
+        
+        # Create collection with embedding function
+        self.collection = self.client.get_or_create_collection(
+            name=collection_name,
+            embedding_function=embedding_func
+        )
+
+    def process_json_file(self, file_path: str):
+        """Process a podcast transcript JSON file."""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            transcript_data = json.load(f)
+        
+        segments = []
+        for idx, entry in enumerate(transcript_data):
+            segment = PodcastSegment(
+                id=f"{os.path.basename(file_path)}_{idx}",
+                speaker=entry['speaker'],
+                content=entry['content'],
+                source_file=file_path
+            )
+            segments.append(segment)
+        
+        self.add_segments(segments)
+
+    def process_all_json_files(self, directory: str = "youtube_scraper/jsonoutputs"):
+        """Process all JSON files, skipping already processed ones."""
+        json_files = [f for f in os.listdir(directory) if f.endswith('.json')]
+        processed_files = self.get_processed_files()
+        
+        # Filter out already processed files
+        new_files = [f for f in json_files if f not in processed_files]
+        
+        for json_file in new_files:
+            file_path = os.path.join(directory, json_file)
+            self.process_json_file(file_path)
+```
+
+### Querying Podcast KB
+
+From `chatbot.py:362-369`, the podcast KB is registered as a tool:
+
+```python chatbot.py
+if os.getenv("USE_PODCAST_KNOWLEDGE_BASE", "true").lower() == "true" and podcast_knowledge_base is not None:
+    tools.append(Tool(
+        name="query_podcast_knowledge_base",
+        func=lambda query: podcast_knowledge_base.format_query_results(
+            podcast_knowledge_base.query_knowledge_base(query)
+        ),
+        description="""Query the podcast knowledge base for information from podcast transcripts.
+        Returns relevant segments from podcast episodes.
+        Use this to answer questions about topics discussed in the podcast.
+        
+        Example: query_podcast_knowledge_base("What did the guest say about DeFi?")
+        """
+    ))
+```
+
+### Dynamic Query Generation
+
+For Twitter automation, the agent generates dynamic queries using LLM. From `chatbot.py:97-147`:
+
+```python chatbot.py
+async def generate_llm_podcast_query(llm: ChatAnthropic = None) -> str:
+    """Generates a dynamic, contextually-aware query for the podcast knowledge base."""
+    llm = ChatAnthropic(model="claude-3-5-haiku-20241022")
+    
+    # Format the prompt with random selections
+    prompt = PODCAST_QUERY_PROMPT.format(
+        topics=random.sample(PODCAST_TOPICS, 3),
+        aspects=random.sample(PODCAST_ASPECTS, 2)
+    )
+    
+    response = await llm.ainvoke([HumanMessage(content=prompt)])
+    query = response.content.strip()
+    
+    return query
+```
+
+This is used in Twitter automation (line 810) to create diverse, contextual content.
+
+## Knowledge Base Tools Reference
+
+### Twitter KB Methods
+
+<ParamField path="add_tweets" type="function">
+  Add tweets to the knowledge base
+  
+  **Parameters:**
+  - `tweets: List[Tweet]` - List of Tweet objects to add
+  
+  **Location:** `twitter_agent/twitter_knowledge_base.py:56-72`
+</ParamField>
+
+<ParamField path="query_knowledge_base" type="function">
+  Query for relevant tweets
+  
+  **Parameters:**
+  - `query: str` - Search query
+  - `n_results: int = 10` - Number of results to return
+  
+  **Returns:** List of dicts with `text`, `metadata`, and `relevance_score`
+  
+  **Location:** `twitter_agent/twitter_knowledge_base.py:74-118`
+</ParamField>
+
+<ParamField path="clear_collection" type="function">
+  Clear all tweets from the knowledge base
+  
+  **Returns:** `bool` - Success status
+  
+  **Location:** `twitter_agent/twitter_knowledge_base.py:155-168`
+</ParamField>
+
+<ParamField path="get_collection_stats" type="function">
+  Get statistics about the knowledge base
+  
+  **Returns:** Dict with `count` and `last_update`
+  
+  **Location:** `twitter_agent/twitter_knowledge_base.py:135-153`
+</ParamField>
+
+### Podcast KB Methods
+
+<ParamField path="add_segments" type="function">
+  Add podcast segments to the knowledge base
+  
+  **Parameters:**
+  - `segments: List[PodcastSegment]` - List of segments to add
+  
+  **Location:** `podcast_agent/podcast_knowledge_base.py:53-74`
+</ParamField>
+
+<ParamField path="process_json_file" type="function">
+  Process a single transcript file
+  
+  **Parameters:**
+  - `file_path: str` - Path to JSON transcript file
+  
+  **Returns:** `bool` - Success status
+  
+  **Location:** `podcast_agent/podcast_knowledge_base.py:76-98`
+</ParamField>
+
+<ParamField path="process_all_json_files" type="function">
+  Process all JSON files in directory
+  
+  **Parameters:**
+  - `directory: str` - Directory containing transcript files
+  
+  **Location:** `podcast_agent/podcast_knowledge_base.py:178-208`
+</ParamField>
+
+<ParamField path="query_knowledge_base" type="function">
+  Query for relevant podcast segments
+  
+  **Parameters:**
+  - `query: str` - Search query
+  - `n_results: int = 5` - Number of results to return
+  
+  **Returns:** List of dicts with `content`, `metadata`, and `relevance_score`
+  
+  **Location:** `podcast_agent/podcast_knowledge_base.py:100-134`
+</ParamField>
+
+## Advanced Usage
+
+### Creating Custom Knowledge Bases
+
+You can create your own knowledge base following the same pattern:
+
+```python my_agent/my_knowledge_base.py
+import chromadb
+from sentence_transformers import SentenceTransformer
+from typing import List, Dict
+from pydantic import BaseModel
+
+class Document(BaseModel):
+    id: str
+    content: str
+    metadata: Dict[str, str]
+
+class MyKnowledgeBase:
+    def __init__(self, collection_name: str = "my_knowledge"):
+        self.client = chromadb.PersistentClient(path="./chroma_db")
+        self.embedding_model = SentenceTransformer('all-mpnet-base-v2')
+        
+        class EmbeddingFunction:
+            def __init__(self, model):
+                self.model = model
+            def __call__(self, input: List[str]) -> List[List[float]]:
+                return self.model.encode(input).tolist()
+        
+        self.collection = self.client.get_or_create_collection(
+            name=collection_name,
+            embedding_function=EmbeddingFunction(self.embedding_model)
+        )
+    
+    def add_documents(self, documents: List[Document]):
+        self.collection.add(
+            documents=[doc.content for doc in documents],
+            ids=[doc.id for doc in documents],
+            metadatas=[doc.metadata for doc in documents]
+        )
+    
+    def query(self, query: str, n_results: int = 5) -> List[Dict]:
+        results = self.collection.query(
+            query_texts=[query],
+            n_results=n_results
+        )
+        
+        return [{
+            "content": doc,
+            "metadata": meta,
+            "score": 1 - dist
+        } for doc, meta, dist in zip(
+            results['documents'][0],
+            results['metadatas'][0],
+            results['distances'][0]
+        )]
+```
+
+Register it as a tool:
+
+```python chatbot.py
+from my_agent.my_knowledge_base import MyKnowledgeBase
+
+def create_agent_tools(llm, knowledge_base, podcast_knowledge_base, agent_kit, config):
+    tools = []
+    
+    if os.getenv("USE_MY_KB", "false").lower() == "true":
+        my_kb = MyKnowledgeBase()
+        # Load your data
+        my_kb.add_documents(load_my_documents())
+        
+        tools.append(Tool(
+            name="query_my_knowledge_base",
+            func=lambda q: my_kb.query(q),
+            description="Query my custom knowledge base"
+        ))
+    
+    return tools
+```
+
+### Optimizing Embeddings
+
+Both knowledge bases use `all-mpnet-base-v2`. For different use cases, consider:
+
+<CardGroup cols={2}>
+  <Card title="all-MiniLM-L6-v2" icon="gauge-high">
+    **Faster, smaller**
+    - 384 dimensions
+    - Good for large datasets
+    - Slightly lower quality
+  </Card>
+  <Card title="all-mpnet-base-v2" icon="star">
+    **Default choice**
+    - 768 dimensions
+    - Best quality/speed balance
+    - Used in framework
+  </Card>
+  <Card title="multi-qa-mpnet-base-dot-v1" icon="comments">
+    **Q&A optimized**
+    - 768 dimensions
+    - Better for question-answering
+    - Good for podcast KB
+  </Card>
+  <Card title="paraphrase-multilingual-mpnet-base-v2" icon="language">
+    **Multilingual**
+    - 768 dimensions
+    - 50+ languages
+    - For international content
+  </Card>
+</CardGroup>
+
+Change the model in both knowledge base implementations:
+
+```python
+self.embedding_model = SentenceTransformer('multi-qa-mpnet-base-dot-v1')
+```
+
+### Persistence and Backup
+
+ChromaDB data is stored in `./chroma_db`. To backup:
+
+```bash
+# Backup knowledge bases
+tar -czf kb-backup-$(date +%Y%m%d).tar.gz chroma_db/
+
+# Restore from backup
+tar -xzf kb-backup-20260302.tar.gz
+```
+
+### Monitoring KB Performance
+
+Track knowledge base statistics:
+
+```python
+stats = knowledge_base.get_collection_stats()
+print(f"Twitter KB contains {stats['count']} tweets")
+print(f"Last updated: {stats['last_update']}")
+
+podcast_stats = podcast_knowledge_base.get_collection_stats()
+print(f"Podcast KB contains {podcast_stats['count']} segments")
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Update Frequency">
+    **Twitter KB:**
+    - Update before each automation cycle for latest tweets
+    - Consider rate limits (5 KOLs × 15 tweets = 75 API calls)
+    - Space updates 5 seconds apart (REQUEST_DELAY)
+
+    **Podcast KB:**
+    - Update when new transcripts are available
+    - Automatically skips already-processed files
+    - No API rate limits to worry about
+  </Accordion>
+
+  <Accordion title="Query Optimization">
+    - Keep queries specific and focused
+    - Use 5-10 results for most queries
+    - Higher `n_results` for broad research
+    - Lower `n_results` for specific facts
+
+    ```python
+    # Specific fact lookup
+    results = kb.query_knowledge_base("What is Ethereum gas limit", n_results=3)
+
+    # Broad research
+    results = kb.query_knowledge_base("blockchain trends 2026", n_results=15)
+    ```
+  </Accordion>
+
+  <Accordion title="Content Quality">
+    **Twitter KB:**
+    - Curate high-quality KOL list
+    - Focus on thought leaders in your domain
+    - Remove inactive or low-quality accounts
+
+    **Podcast KB:**
+    - Clean transcript formatting
+    - Accurate speaker attribution
+    - Split long monologues into logical segments
+  </Accordion>
+
+  <Accordion title="Storage Management">
+    ChromaDB stores embeddings efficiently, but monitor disk usage:
+
+    ```bash
+    # Check ChromaDB size
+    du -sh chroma_db/
+
+    # Clear old data if needed
+    knowledge_base.clear_collection()
+    ```
+
+    Each tweet/segment uses ~4KB (768-dim embedding + metadata)
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Twitter API Errors">
+    ```python
+    Error getting tweets for user 12345: 429 Too Many Requests
+    ```
+
+    **Solution:**
+    - The framework uses `wait_on_rate_limit=True` (line 30 of `twitter_agent/custom_twitter_actions.py`)
+    - Increase `REQUEST_DELAY` in update function
+    - Reduce `TWEETS_PER_KOL` or `TOP_KOLS`
+  </Accordion>
+
+  <Accordion title="ChromaDB Persistence Issues">
+    ```python
+    Error initializing collection: database is locked
+    ```
+
+    **Solution:**
+    - Ensure only one agent instance is running
+    - Check for orphaned processes: `ps aux | grep python`
+    - Delete lock file: `rm chroma_db/*.lock`
+  </Accordion>
+
+  <Accordion title="Embedding Model Errors">
+    ```python
+    Error loading model 'all-mpnet-base-v2'
+    ```
+
+    **Solution:**
+    ```bash
+    # Model downloads automatically on first use
+    # If download fails, try manually:
+    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-mpnet-base-v2')"
+    ```
+  </Accordion>
+
+  <Accordion title="No Results Returned">
+    ```python
+    No results found in knowledge base
+    ```
+
+    **Solution:**
+    - Verify KB is populated: `knowledge_base.get_collection_stats()`
+    - Check query relevance to indexed content
+    - Try broader query terms
+    - Increase `n_results` parameter
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Twitter Tools" icon="twitter" href="/tools/social/twitter-operations">
+    Learn about Twitter integration tools
+  </Card>
+  <Card title="Creating Custom Tools" icon="wrench" href="/guides/creating-custom-tools">
+    Build tools that use knowledge bases
+  </Card>
+  <Card title="Running Agents" icon="play" href="/guides/running-agents">
+    Use knowledge bases in different modes
+  </Card>
+  <Card title="Core Actions" icon="bolt" href="/api/hyperbolic/rent-compute">
+    Explore other agent capabilities
+  </Card>
+</CardGroup>

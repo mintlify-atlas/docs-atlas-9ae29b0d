@@ -1,0 +1,482 @@
+---
+title: SSH Access & Remote Commands
+description: Connect to GPU instances via SSH and execute remote commands programmatically
+---
+
+The Hyperbolic toolkit provides tools for connecting to rented GPU instances via SSH and executing commands remotely. This enables your AI agent to fully utilize rented compute resources.
+
+## SSH Tools Overview
+
+<CardGroup cols={2}>
+  <Card title="SSH Connect" icon="link">
+    Establish SSH connection to a remote GPU instance
+  </Card>
+  <Card title="Remote Shell" icon="terminal">
+    Execute commands on the connected instance
+  </Card>
+</CardGroup>
+
+## Tool: ssh_connect
+
+Establishes an SSH connection to a remote server. Once connected, all shell commands run through `remote_shell` will execute on that server.
+
+### Parameters
+
+<ParamField path="host" type="string" required>
+  The hostname or IP address of the remote server
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  SSH username for authentication
+</ParamField>
+
+<ParamField path="password" type="string" optional>
+  SSH password for authentication (optional if using private key)
+</ParamField>
+
+<ParamField path="private_key_path" type="string" optional>
+  Path to private key file. If not provided, uses `SSH_PRIVATE_KEY_PATH` environment variable
+</ParamField>
+
+<ParamField path="port" type="integer" default="22">
+  SSH port number
+</ParamField>
+
+### Returns
+
+Returns a connection status message:
+
+```
+Successfully connected to 12.34.56.78 as ubuntu
+```
+
+### Usage Example
+
+```python
+from hyperbolic_agentkit_core.actions import SSHAccessAction
+
+# Connect to a GPU instance
+ssh_action = SSHAccessAction()
+result = ssh_action.func(
+    host="12.34.56.78",
+    username="ubuntu",
+    password="your-password",
+    port=22
+)
+
+print(result)
+```
+
+### Using Private Key Authentication
+
+```python
+# Set environment variable
+import os
+os.environ["SSH_PRIVATE_KEY_PATH"] = "/home/user/.ssh/id_rsa"
+
+# Connect with key
+ssh_action = SSHAccessAction()
+result = ssh_action.func(
+    host="12.34.56.78",
+    username="ubuntu",
+    port=22
+)
+```
+
+### Complete Workflow: Rent and Connect
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    RentComputeAction,
+    GetGpuStatusAction,
+    SSHAccessAction
+)
+import json
+import time
+
+# Step 1: Rent compute
+rent = RentComputeAction()
+result = rent.func(
+    cluster_name="us-east-1-cluster",
+    node_name="node-abc123",
+    gpu_count="2"
+)
+instance = json.loads(result)
+instance_id = instance["instance_id"]
+
+print(f"Rented instance: {instance_id}")
+
+# Step 2: Wait for instance to be ready
+get_status = GetGpuStatusAction()
+while True:
+    status = get_status.func()
+    status_data = json.loads(status) if isinstance(status, str) else status
+    
+    our_instance = None
+    for inst in status_data.get("instances", []):
+        if inst.get("instance_id") == instance_id:
+            our_instance = inst
+            break
+    
+    if our_instance and our_instance.get("status") == "running":
+        ssh_command = our_instance["ssh_command"]
+        print(f"Instance ready! SSH: {ssh_command}")
+        
+        # Parse SSH command to get host
+        # Format: ssh ubuntu@12.34.56.78 -p 22
+        parts = ssh_command.split()
+        user_host = parts[1]  # ubuntu@12.34.56.78
+        username, host = user_host.split("@")
+        
+        break
+    
+    print("Waiting for instance...")
+    time.sleep(5)
+
+# Step 3: Connect via SSH
+ssh = SSHAccessAction()
+connection = ssh.func(
+    host=host,
+    username=username,
+    password="your-password"  # or use private_key_path
+)
+
+print(connection)
+```
+
+<Note>
+**SSH Connection Persistence**
+
+The SSH connection remains active until:
+- Explicitly disconnected
+- The script/agent terminates
+- The remote instance is terminated
+- Connection timeout occurs
+</Note>
+
+### Implementation Details
+
+Source: `hyperbolic_agentkit_core/actions/ssh_access.py:32-53`
+
+```python
+def connect_ssh(host: str, username: str, password: Optional[str] = None, 
+                private_key_path: Optional[str] = None, port: int = 22) -> str:
+    """Establish SSH connection to remote server."""
+    
+    return ssh_manager.connect(
+        host=host,
+        username=username,
+        password=password,
+        private_key_path=private_key_path,
+        port=port
+    )
+```
+
+The connection is managed by a singleton `ssh_manager` that maintains the active session.
+
+## Tool: remote_shell
+
+Executes shell commands on the remote server via the active SSH connection.
+
+### Parameters
+
+<ParamField path="command" type="string" required>
+  The shell command to execute on the remote server
+</ParamField>
+
+### Returns
+
+Returns the command output as a string:
+
+```
+ubuntu@instance:~$ nvidia-smi
+Thu Mar 15 10:30:00 2024       
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 535.104.05             Driver Version: 535.104.05   CUDA Version: 12.2     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA H100                    On  | 00000000:00:04.0 Off |                    0 |
+| N/A   30C    P0              45W / 350W |      0MiB / 81559MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+```
+
+### Usage Examples
+
+#### Basic Command Execution
+
+```python
+from hyperbolic_agentkit_core.actions import RemoteShellAction
+
+# Execute a command
+shell = RemoteShellAction()
+result = shell.func(command="nvidia-smi")
+
+print(result)
+```
+
+#### Check SSH Status
+
+```python
+# Special command to check connection status
+result = shell.func(command="ssh_status")
+print(result)
+# Output: Connected to 12.34.56.78 as ubuntu on port 22
+```
+
+#### Install Dependencies
+
+```python
+# Install Python packages
+result = shell.func(command="pip install torch torchvision")
+print(result)
+
+# Install system packages
+result = shell.func(command="sudo apt-get update && sudo apt-get install -y htop")
+print(result)
+```
+
+#### Run Python Scripts
+
+```python
+# Upload and run a training script
+commands = [
+    "git clone https://github.com/user/ml-project.git",
+    "cd ml-project && pip install -r requirements.txt",
+    "python train.py --epochs 100 --gpu 0,1"
+]
+
+for cmd in commands:
+    result = shell.func(command=cmd)
+    print(f"Executed: {cmd}")
+    print(f"Output: {result}")
+    print()
+```
+
+### With LangChain Agent
+
+```python
+from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import create_react_agent
+from hyperbolic_langchain.agent_toolkits import HyperbolicToolkit
+from hyperbolic_langchain.utils import HyperbolicAgentkitWrapper
+
+hyperbolic = HyperbolicAgentkitWrapper()
+toolkit = HyperbolicToolkit.from_hyperbolic_agentkit_wrapper(hyperbolic)
+tools = toolkit.get_tools()
+
+llm = ChatOpenAI(model="gpt-4")
+agent = create_react_agent(llm, tools)
+
+# Let the agent handle everything
+events = agent.stream(
+    {
+        "messages": [(
+            "user",
+            "Rent a 2-GPU H100 instance, install PyTorch, and run nvidia-smi"
+        )]
+    },
+    stream_mode="values",
+)
+
+for event in events:
+    event["messages"][-1].pretty_print()
+```
+
+<Note>
+The agent will automatically:
+1. Check available GPUs
+2. Rent the appropriate instance
+3. Wait for it to be ready
+4. Connect via SSH
+5. Install PyTorch
+6. Run nvidia-smi and return the results
+</Note>
+
+### Error Handling
+
+```python
+from hyperbolic_agentkit_core.actions import RemoteShellAction
+
+shell = RemoteShellAction()
+
+try:
+    # This will fail if not connected
+    result = shell.func(command="ls -la")
+    print(result)
+except Exception as e:
+    print(f"Error: {e}")
+    # Output: Error: No active SSH connection. Please connect to a remote server first using ssh_connect.
+```
+
+<Warning>
+**Requires Active SSH Connection**
+
+The `remote_shell` tool requires an active SSH connection established via `ssh_connect`. If you try to execute commands without connecting first, you'll receive an error.
+
+Always connect before running commands:
+```python
+# 1. Connect first
+ssh = SSHAccessAction()
+ssh.func(host="12.34.56.78", username="ubuntu", password="pass")
+
+# 2. Then execute commands
+shell = RemoteShellAction()
+shell.func(command="ls -la")
+```
+</Warning>
+
+### Implementation Details
+
+Source: `hyperbolic_agentkit_core/actions/remote_shell.py:24-43`
+
+```python
+def execute_remote_command(command: str) -> str:
+    """Execute a command on the remote server."""
+    
+    # Special command to check SSH status
+    if command.strip().lower() == 'ssh_status':
+        return ssh_manager.get_connection_info()
+    
+    # Verify SSH is connected before executing
+    if not ssh_manager.is_connected:
+        return "Error: No active SSH connection. Please connect to a remote server first using ssh_connect."
+    
+    # Execute command remotely
+    return ssh_manager.execute(command)
+```
+
+## Complete Example: Train a Model
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    GetAvailableGpusAction,
+    RentComputeAction,
+    GetGpuStatusAction,
+    SSHAccessAction,
+    RemoteShellAction,
+    TerminateComputeAction
+)
+import json
+import time
+
+# 1. Find available H100 GPUs
+print("Finding available GPUs...")
+get_gpus = GetAvailableGpusAction()
+available = get_gpus.func()
+print(available)
+
+# 2. Rent 2 H100 GPUs (use actual values from step 1)
+print("\nRenting compute...")
+rent = RentComputeAction()
+result = rent.func(
+    cluster_name="us-east-1-cluster",
+    node_name="node-abc123",
+    gpu_count="2"
+)
+instance = json.loads(result)
+instance_id = instance["instance_id"]
+
+# 3. Wait for instance to be ready
+print(f"\nWaiting for instance {instance_id}...")
+get_status = GetGpuStatusAction()
+while True:
+    status = get_status.func()
+    status_data = json.loads(status) if isinstance(status, str) else status
+    
+    our_instance = None
+    for inst in status_data.get("instances", []):
+        if inst.get("instance_id") == instance_id:
+            our_instance = inst
+            break
+    
+    if our_instance and our_instance.get("status") == "running":
+        # Parse SSH details from command
+        ssh_cmd = our_instance["ssh_command"]
+        parts = ssh_cmd.split()
+        username, host = parts[1].split("@")
+        print(f"Instance ready!")
+        break
+    
+    time.sleep(5)
+
+# 4. Connect via SSH
+print("\nConnecting via SSH...")
+ssh = SSHAccessAction()
+connection = ssh.func(
+    host=host,
+    username=username,
+    password="your-password"
+)
+print(connection)
+
+# 5. Setup environment and train
+shell = RemoteShellAction()
+
+print("\nChecking GPUs...")
+print(shell.func(command="nvidia-smi"))
+
+print("\nCloning repository...")
+print(shell.func(command="git clone https://github.com/user/ml-project.git"))
+
+print("\nInstalling dependencies...")
+print(shell.func(command="cd ml-project && pip install -r requirements.txt"))
+
+print("\nStarting training...")
+print(shell.func(command="cd ml-project && python train.py --gpus 2 --epochs 100"))
+
+# 6. Cleanup
+print("\nTerminating instance...")
+terminate = TerminateComputeAction()
+print(terminate.func(instance_id=instance_id))
+
+print("\nDone!")
+```
+
+## Security Best Practices
+
+<Warning>
+**SSH Credentials Security**
+
+- Never hardcode passwords in your code
+- Use environment variables or secure vaults for credentials
+- Prefer SSH key authentication over passwords
+- Rotate keys regularly
+- Limit SSH access to specific IP addresses when possible
+</Warning>
+
+### Using Environment Variables
+
+```python
+import os
+
+# Set credentials in environment
+os.environ["SSH_PASSWORD"] = "your-password"
+os.environ["SSH_PRIVATE_KEY_PATH"] = "/path/to/key"
+
+# Use in code
+ssh = SSHAccessAction()
+result = ssh.func(
+    host="12.34.56.78",
+    username="ubuntu",
+    password=os.environ.get("SSH_PASSWORD"),
+    private_key_path=os.environ.get("SSH_PRIVATE_KEY_PATH")
+)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Rent Compute" icon="server" href="/tools/hyperbolic/rent-compute">
+    Learn how to rent GPU instances
+  </Card>
+  <Card title="Manage GPUs" icon="sliders" href="/tools/hyperbolic/manage-gpus">
+    Monitor and control your instances
+  </Card>
+  <Card title="Overview" icon="house" href="/tools/hyperbolic/overview">
+    Back to Hyperbolic Tools overview
+  </Card>
+</CardGroup>

@@ -1,0 +1,324 @@
+---
+title: "Token Operations"
+description: "Execute token transfers, ERC-20 operations, and interact with DeFi protocols using CDP action providers"
+---
+
+## Overview
+
+Hyperbolic AgentKit provides comprehensive token operation capabilities through specialized action providers. These providers enable ERC-20 token interactions, wrapped ETH operations, and integration with price oracles.
+
+## ERC-20 Token Operations
+
+The `erc20_action_provider` enables standard ERC-20 token operations:
+
+```python
+from coinbase_agentkit import (
+    AgentKit,
+    AgentKitConfig,
+    erc20_action_provider,
+)
+
+agent_kit = AgentKit(AgentKitConfig(
+    wallet_provider=wallet_provider,
+    action_providers=[
+        erc20_action_provider(),  # ERC-20 token operations
+    ]
+))
+```
+
+### Supported ERC-20 Operations
+
+The ERC-20 action provider typically supports:
+
+- **Transfer tokens**: Send ERC-20 tokens to another address
+- **Check balance**: Query token balance for an address
+- **Approve spending**: Approve another address to spend tokens
+- **Check allowance**: View approved spending limits
+
+### Example: Token Transfer
+
+Using the agent to transfer tokens:
+
+```python
+from langchain_core.messages import HumanMessage
+
+# Agent can interpret natural language commands
+response = agent_executor.invoke({
+    "messages": [HumanMessage(content="Transfer 100 USDC to 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb")]
+})
+```
+
+## Wrapped ETH (WETH) Operations
+
+The `weth_action_provider` enables WETH-specific operations:
+
+```python
+from coinbase_agentkit import weth_action_provider
+
+agent_kit = AgentKit(AgentKitConfig(
+    wallet_provider=wallet_provider,
+    action_providers=[
+        weth_action_provider(),  # Wrapped ETH operations
+    ]
+))
+```
+
+### WETH Capabilities
+
+- **Wrap ETH**: Convert ETH to WETH
+- **Unwrap WETH**: Convert WETH back to ETH
+- **Transfer WETH**: Send WETH to another address
+
+### Example: Wrapping ETH
+
+```python
+# Natural language command to wrap ETH
+response = agent_executor.invoke({
+    "messages": [HumanMessage(content="Wrap 0.5 ETH")]
+})
+```
+
+## Price Oracle Integration
+
+The `pyth_action_provider` integrates with Pyth Network for price data:
+
+```python
+from coinbase_agentkit import pyth_action_provider
+
+agent_kit = AgentKit(AgentKitConfig(
+    wallet_provider=wallet_provider,
+    action_providers=[
+        pyth_action_provider(),  # Pyth Network price oracle
+    ]
+))
+```
+
+### Price Feed Operations
+
+- **Get price**: Fetch current price for a token pair
+- **Get historical price**: Query historical price data
+- **Price confidence**: Access price confidence intervals
+
+### Example: Querying Prices
+
+```python
+# Get current ETH/USD price
+response = agent_executor.invoke({
+    "messages": [HumanMessage(content="What's the current price of ETH?")]
+})
+```
+
+## Complete Action Provider Setup
+
+From `chatbot.py:460-472`, all action providers are configured together:
+
+```python
+from coinbase_agentkit import (
+    AgentKit,
+    AgentKitConfig,
+    cdp_api_action_provider,
+    cdp_wallet_action_provider,
+    erc20_action_provider,
+    pyth_action_provider,
+    wallet_action_provider,
+    weth_action_provider,
+)
+
+# Initialize AgentKit with all action providers
+agent_kit = AgentKit(AgentKitConfig(
+    wallet_provider=wallet_provider,
+    action_providers=[
+        cdp_api_action_provider(),     # CDP API operations
+        cdp_wallet_action_provider(),  # CDP wallet operations
+        erc20_action_provider(),       # ERC-20 tokens
+        pyth_action_provider(),        # Price oracles
+        wallet_action_provider(),      # General wallet ops
+        weth_action_provider(),        # Wrapped ETH
+    ]
+))
+```
+
+## LangChain Integration
+
+Convert CDP tools to LangChain-compatible tools:
+
+```python
+from coinbase_agentkit_langchain import get_langchain_tools
+
+# Get all tools from AgentKit
+coinbase_tools = get_langchain_tools(agent_kit)
+
+# Add to your agent's tool list
+tools.extend(coinbase_tools)
+```
+
+## Usage in Agent Context
+
+From `chatbot.py:373-377`, tools are conditionally added:
+
+```python
+if os.getenv("USE_COINBASE_TOOLS", "true").lower() == "true":
+    print_system("Adding Coinbase AgentKit tools...")
+    coinbase_tools = get_langchain_tools(agent_kit)
+    tools.extend(coinbase_tools)
+    print_system(f"Added {len(coinbase_tools)} Coinbase tools")
+```
+
+## Environment Configuration
+
+Control token operations with environment variables:
+
+```bash
+# Enable/disable all Coinbase tools
+USE_COINBASE_TOOLS=true
+
+# CDP credentials
+CDP_API_KEY_NAME=your_api_key_name
+CDP_API_KEY_PRIVATE=your_private_key
+
+# Network selection
+CDP_NETWORK_ID=base-mainnet
+```
+
+## Common Token Operations
+
+### Check Token Balance
+
+Agent can interpret balance queries:
+
+```python
+response = agent_executor.invoke({
+    "messages": [HumanMessage(content="What's my USDC balance?")]
+})
+```
+
+### Multi-Step Operations
+
+Combine multiple operations:
+
+```python
+# Agent can handle complex multi-step requests
+response = agent_executor.invoke({
+    "messages": [HumanMessage(
+        content="Check the price of ETH, then wrap 0.1 ETH if the price is above $2000"
+    )]
+})
+```
+
+### Approve and Transfer Pattern
+
+For DeFi interactions requiring approval:
+
+```python
+response = agent_executor.invoke({
+    "messages": [HumanMessage(
+        content="Approve 1000 USDC for spending by contract 0x... then execute the swap"
+    )]
+})
+```
+
+## Action Provider Capabilities
+
+Each action provider exposes specific capabilities:
+
+### CDP API Actions
+- Network information queries
+- Transaction status checks
+- Gas price estimates
+
+### CDP Wallet Actions
+- Address generation
+- Balance queries
+- Transaction signing
+
+### Wallet Actions (General)
+- Cross-chain operations
+- Multi-signature support
+- Transaction history
+
+## Error Handling
+
+Token operations may fail for various reasons:
+
+```python
+try:
+    response = agent_executor.invoke({
+        "messages": [HumanMessage(content="Transfer 1000 USDC to 0x...")]
+    })
+except Exception as e:
+    print(f"Transaction failed: {e}")
+    # Common errors:
+    # - Insufficient balance
+    # - Invalid address
+    # - Network congestion
+    # - Allowance not set
+```
+
+## Best Practices
+
+### Gas Optimization
+
+- Check gas prices before transactions
+- Batch operations when possible
+- Use appropriate gas limits
+
+### Security
+
+- Validate addresses before transfers
+- Use testnet for development
+- Set reasonable allowance limits
+- Monitor transaction confirmations
+
+### Rate Limiting
+
+- Be aware of API rate limits
+- Implement retry logic for failed requests
+- Use caching for price data when appropriate
+
+## Testing Token Operations
+
+### Using Testnets
+
+Test with testnet tokens before mainnet:
+
+```bash
+# Use Base Sepolia testnet
+CDP_NETWORK_ID=base-sepolia
+```
+
+### Testnet Faucets
+
+Obtain testnet tokens from:
+- Base Sepolia faucet for ETH
+- Testnet token contracts for ERC-20 tokens
+
+## Advanced Usage
+
+### Custom Token Contracts
+
+Interact with any ERC-20 token:
+
+```python
+response = agent_executor.invoke({
+    "messages": [HumanMessage(
+        content="Transfer 100 tokens from contract 0xTokenAddress to 0xRecipient"
+    )]
+})
+```
+
+### Price-Based Automation
+
+Create price-triggered actions:
+
+```python
+response = agent_executor.invoke({
+    "messages": [HumanMessage(
+        content="Monitor ETH price and notify me if it drops below $1800"
+    )]
+})
+```
+
+## Next Steps
+
+- [Wallet Management](/tools/blockchain/wallet-management) - Manage your wallets
+- [Blockchain Overview](/tools/blockchain/overview) - Understand the complete integration

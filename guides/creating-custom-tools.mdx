@@ -1,0 +1,655 @@
+---
+title: "Creating Custom Tools"
+description: "Build custom tools and capabilities for your Hyperbolic AgentKit agents with LangChain integration"
+---
+
+## Overview
+
+Hyperbolic AgentKit uses LangChain's tool system to extend agent capabilities. This guide shows you how to create custom tools following the framework's patterns.
+
+## Tool Basics
+
+Tools are registered in two locations depending on your interface:
+
+1. **Chat/Terminal Interface** - `chatbot.py` via `create_agent_tools()` (line 283)
+2. **Voice Agent Interface** - `server/src/server/tools.py` via `create_tools()`
+
+### Tool Types
+
+The framework supports two main tool implementations:
+
+<CardGroup cols={2}>
+  <Card title="LangChain BaseTool" icon="link">
+    Full-featured tools with async support, schema validation, and rich descriptions
+  </Card>
+  <Card title="LangChain Tool Wrapper" icon="wrench">
+    Simple function-based tools for quick implementations
+  </Card>
+</CardGroup>
+
+## Creating a Simple Tool
+
+Let's create a basic tool using the Tool wrapper pattern from `chatbot.py:158-180`.
+
+<Steps>
+  <Step title="Define Tool Function">
+    Create a function that performs your desired action:
+
+    ```python
+    def check_crypto_price(symbol: str) -> str:
+        """Get current cryptocurrency price.
+        
+        Args:
+            symbol: Crypto symbol (e.g., 'BTC', 'ETH')
+            
+        Returns:
+            Current price as string
+        """
+        # Your implementation here
+        import requests
+        
+        url = f"https://api.coingecko.com/api/v3/simple/price"
+        params = {
+            "ids": symbol.lower(),
+            "vs_currencies": "usd"
+        }
+        
+        response = requests.get(url, params=params)
+        data = response.json()
+        
+        price = data.get(symbol.lower(), {}).get("usd", "Unknown")
+        return f"Current price of {symbol}: ${price}"
+    ```
+  </Step>
+
+  <Step title="Create Tool Wrapper">
+    Wrap your function using LangChain's Tool class:
+
+    ```python
+    from langchain.tools import Tool
+
+    crypto_price_tool = Tool(
+        name="check_crypto_price",
+        func=check_crypto_price,
+        description="""Get the current price of a cryptocurrency.
+        Input should be a crypto symbol like 'BTC', 'ETH', or 'SOL'.
+        Example: check_crypto_price('BTC')"""
+    )
+    ```
+
+    <Note>
+      The description is crucial - it tells the agent when and how to use your tool.
+    </Note>
+  </Step>
+
+  <Step title="Register the Tool">
+    Add your tool to the tools list in `chatbot.py` within `create_agent_tools()`:
+
+    ```python chatbot.py
+    def create_agent_tools(llm, knowledge_base, podcast_knowledge_base, agent_kit, config):
+        """Create and return a list of tools for the agent to use."""
+        tools = []
+
+        # ... existing tools ...
+
+        # Add your custom tool
+        tools.append(crypto_price_tool)
+
+        return tools
+    ```
+  </Step>
+</Steps>
+
+## Creating an Advanced Tool with BaseTool
+
+For more complex tools with async support and validation, extend `BaseTool`. Here's an example based on `browser_agent/browser_tool.py`:
+
+<Steps>
+  <Step title="Create Tool Class">
+    ```python my_tools/advanced_tool.py
+    from typing import Optional, Literal
+    from langchain_core.tools import BaseTool
+    from pydantic import Field
+    import asyncio
+
+    class WebScraperTool(BaseTool):
+        """Tool for web scraping with custom parsing."""
+        
+        name: Literal["web_scraper"] = "web_scraper"
+        description: str = """Scrape and parse content from websites.
+        Input should be a URL to scrape.
+        Returns cleaned text content from the page.
+        
+        Examples:
+        - "Scrape https://example.com for main content"
+        - "Extract text from https://news.site.com/article"
+        """
+        
+        # Optional: Add configurable fields
+        timeout: int = Field(default=30, description="Request timeout in seconds")
+        
+        def __init__(self, timeout: Optional[int] = None):
+            """Initialize the scraper tool."""
+            super().__init__()
+            if timeout is not None:
+                self.timeout = timeout
+
+        async def _arun(self, url: str) -> str:
+            """Run the scraper asynchronously."""
+            import aiohttp
+            from bs4 import BeautifulSoup
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=self.timeout) as response:
+                    html = await response.text()
+                    
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            # Get text and clean it
+            text = soup.get_text()
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = '\n'.join(chunk for chunk in chunks if chunk)
+            
+            return text
+
+        def _run(self, url: str) -> str:
+            """Run the scraper synchronously."""
+            return asyncio.run(self._arun(url))
+    ```
+  </Step>
+
+  <Step title="Register Advanced Tool">
+    ```python chatbot.py
+    from my_tools.advanced_tool import WebScraperTool
+
+    def create_agent_tools(llm, knowledge_base, podcast_knowledge_base, agent_kit, config):
+        tools = []
+        
+        # Add advanced tool
+        scraper = WebScraperTool(timeout=45)
+        tools.append(scraper)
+        
+        return tools
+    ```
+  </Step>
+</Steps>
+
+## Tool Organization Patterns
+
+The framework organizes tools by domain. Follow this structure from the README (lines 268-306):
+
+```
+Hyperbolic-AgentKit/
+├── my_agent/              # Your agent-specific capabilities
+│   ├── __init__.py
+│   ├── my_tool.py        # Tool implementation
+│   └── my_toolkit.py     # Tool collection
+```
+
+### Creating a Tool Module
+
+<CodeGroup>
+```python my_agent/__init__.py
+"""My custom agent module."""
+
+from my_agent.my_tool import MyCustomTool
+from my_agent.my_toolkit import MyToolkit
+
+__all__ = ["MyCustomTool", "MyToolkit"]
+```
+
+```python my_agent/my_tool.py
+from langchain_core.tools import BaseTool
+from typing import Optional
+
+class MyCustomTool(BaseTool):
+    """My custom tool implementation."""
+    
+    name: str = "my_custom_tool"
+    description: str = "Detailed description of what this tool does"
+    
+    def _run(self, input_text: str) -> str:
+        """Execute tool logic."""
+        # Your implementation
+        return f"Processed: {input_text}"
+```
+
+```python my_agent/my_toolkit.py
+from langchain_core.tools import BaseToolkit
+from typing import List
+from langchain_core.tools import BaseTool
+from my_agent.my_tool import MyCustomTool
+
+class MyToolkit(BaseToolkit):
+    """Collection of related tools."""
+    
+    def get_tools(self) -> List[BaseTool]:
+        """Return list of tools in this toolkit."""
+        return [
+            MyCustomTool(),
+            # Add more related tools
+        ]
+```
+</CodeGroup>
+
+## Real-World Examples
+
+### Example 1: Twitter Tools
+
+From `twitter_agent/custom_twitter_actions.py:90-129`, here's how Twitter tools are implemented:
+
+```python twitter_agent/custom_twitter_actions.py
+import asyncio
+from langchain.tools import Tool
+from twitter_agent.custom_twitter_actions import TwitterClient
+
+# Create client instance
+twitter_client = TwitterClient()
+
+def create_delete_tweet_tool() -> Tool:
+    """Create a delete tweet tool."""
+    return Tool(
+        name="delete_tweet",
+        description="""Delete a tweet using its ID. You can only delete tweets from your own account.
+        Input should be the tweet ID as a string.
+        Example: delete_tweet("1234567890")""",
+        func=lambda tweet_id: asyncio.run(twitter_client.delete_tweet(tweet_id))
+    )
+
+def create_retweet_tool() -> Tool:
+    """Create a retweet tool."""
+    return Tool(
+        name="retweet",
+        description="""Retweet a tweet using its ID. You can only retweet public tweets.
+        Input should be the tweet ID as a string.
+        Example: retweet("1234567890")""",
+        func=lambda tweet_id: asyncio.run(twitter_client.retweet(tweet_id))
+    )
+```
+
+### Example 2: Hyperbolic GPU Tools
+
+From `hyperbolic_agentkit_core/actions/rent_compute.py:28-115`, complex tools use Pydantic schemas:
+
+```python hyperbolic_agentkit_core/actions/rent_compute.py
+from pydantic import BaseModel, Field
+from hyperbolic_agentkit_core.actions.hyperbolic_action import HyperbolicAction
+import requests
+import json
+
+class RentComputeInput(BaseModel):
+    """Input argument schema for compute rental action."""
+
+    cluster_name: str = Field(
+        ..., description="The cluster name that the user wants to rent from")
+    node_name: str = Field(
+        ..., description="The node ID that the user wants to rent")
+    gpu_count: str = Field(
+        ..., description="The amount of GPUs that the user wants to rent from the node")
+
+def rent_compute(cluster_name: str, node_name: str, gpu_count: str) -> str:
+    """Creates a marketplace instance using the Hyperbolic API."""
+    if not cluster_name or not node_name or not gpu_count:
+        raise ValueError("cluster_name, node_name, and gpu_count are required")
+
+    api_key = os.getenv("HYPERBOLIC_API_KEY")
+    endpoint = f"https://api.hyperbolic.xyz/v1/marketplace/instances/create"
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+    payload = {
+        "cluster_name": cluster_name,
+        "node_name": node_name,
+        "gpu_count": gpu_count
+    }
+
+    response = requests.post(endpoint, headers=headers, json=payload)
+    response.raise_for_status()
+    
+    return json.dumps(response.json(), indent=2)
+
+class RentComputeAction(HyperbolicAction):
+    """Rent compute action."""
+    name: str = "rent_compute"
+    description: str = """This tool will allow you to rent a GPU machine on Hyperbolic platform.
+    
+    It takes the following inputs:
+    - cluster_name: Which cluster the node is on
+    - node_name: Which node the user wants to rent
+    - gpu_count: How many GPUs the user wants to rent
+    """
+    args_schema: type[BaseModel] | None = RentComputeInput
+    func: Callable[..., str] = rent_compute
+```
+
+### Example 3: Writing Agent
+
+From `writing_agent/writing_tool.py:15-129`, tools with complex inputs use Pydantic schemas:
+
+```python writing_agent/writing_tool.py
+from pydantic.v1 import BaseModel, Field
+from langchain_core.tools import BaseTool
+from typing import Optional, List
+
+class WritingInput(BaseModel):
+    """Input for the writing tool."""
+    query: str = Field(description="The topic or request for content creation")
+    reference_files: Optional[List[str]] = Field(
+        description="Optional list of reference files for style analysis", 
+        default=None
+    )
+    target_length: Optional[int] = Field(
+        description="Target length of the article in words", 
+        default=1500
+    )
+    output_file: Optional[str] = Field(
+        description="Optional path to save the output text",
+        default=None
+    )
+
+class WritingTool(BaseTool):
+    """Tool for autonomous article writing with research capabilities."""
+    
+    name: str = "writing_agent"
+    description: str = """A powerful tool for autonomous article writing with research capabilities.
+    
+    This tool can:
+    - Analyze and mimic the writing style of reference documents
+    - Research the web for up-to-date information
+    - Create well-structured, informative articles
+    - Generate citations and properly attribute sources
+    """
+    
+    args_schema: type[BaseModel] = WritingInput
+    
+    async def _arun(self, query: str, reference_files: Optional[List[str]] = None, 
+                    target_length: Optional[int] = 1500,
+                    output_file: Optional[str] = None) -> str:
+        """Run the writing agent asynchronously."""
+        from writing_agent.writing_agent import WritingAgent
+        
+        agent = WritingAgent(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        
+        if reference_files:
+            await agent.load_reference_materials(reference_files)
+        
+        result = await agent.create_content(query, target_length, output_file)
+        return result
+```
+
+## Environment-Based Tool Registration
+
+From `chatbot.py:286-398`, use environment variables to conditionally enable tools:
+
+```python chatbot.py
+def create_agent_tools(llm, knowledge_base, podcast_knowledge_base, agent_kit, config):
+    """Create and return a list of tools for the agent to use."""
+    tools = []
+
+    # Browser tools - controlled by environment variable
+    if os.getenv("USE_BROWSER_TOOLS", "true").lower() == "true":
+        browser_toolkit = BrowserToolkit.from_llm(llm)
+        tools.extend(browser_toolkit.get_tools())
+
+    # Writing Agent - controlled by environment variable
+    if os.getenv("USE_WRITING_AGENT", "true").lower() == "true":
+        writing_tool = WritingTool(llm=llm)
+        tools.append(writing_tool)
+
+    # Twitter tools - controlled by environment variable
+    if os.getenv("USE_TWITTER_CORE", "true").lower() == "true":
+        twitter_client = TwitterClient()
+        
+        if os.getenv("USE_TWEET_DELETE", "true").lower() == "true":
+            tools.append(create_delete_tweet_tool())
+        
+        if os.getenv("USE_RETWEET", "true").lower() == "true":
+            tools.append(create_retweet_tool())
+
+    return tools
+```
+
+Add to your `.env`:
+
+```bash .env
+# Enable/disable custom tools
+USE_MY_CUSTOM_TOOL=true
+USE_ADVANCED_FEATURES=false
+```
+
+## Tool Best Practices
+
+<AccordionGroup>
+  <Accordion title="Write Clear Descriptions">
+    The agent uses tool descriptions to decide when to use each tool. Include:
+    - What the tool does
+    - Expected input format
+    - Example usage
+    - Any constraints or requirements
+
+    ```python
+    description="""Get cryptocurrency prices from CoinGecko.
+    
+    Input should be a crypto symbol (e.g., 'BTC', 'ETH', 'SOL').
+    Returns current USD price.
+    
+    Example: check_crypto_price('BTC')
+    
+    Note: Only supports major cryptocurrencies listed on CoinGecko.
+    """
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Errors Gracefully">
+    Always return useful error messages:
+
+    ```python
+    def my_tool_function(input_param: str) -> str:
+        try:
+            result = perform_action(input_param)
+            return f"Success: {result}"
+        except ValueError as e:
+            return f"Invalid input: {str(e)}"
+        except Exception as e:
+            return f"Error occurred: {str(e)}. Please try again."
+    ```
+  </Accordion>
+
+  <Accordion title="Use Async When Possible">
+    For I/O-bound operations, implement `_arun()` for better performance:
+
+    ```python
+    class MyTool(BaseTool):
+        async def _arun(self, input_text: str) -> str:
+            """Async implementation."""
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    return await response.text()
+        
+        def _run(self, input_text: str) -> str:
+            """Sync fallback."""
+            return asyncio.run(self._arun(input_text))
+    ```
+  </Accordion>
+
+  <Accordion title="Validate Inputs with Pydantic">
+    Use Pydantic schemas for complex inputs:
+
+    ```python
+    from pydantic import BaseModel, Field, validator
+
+    class MyToolInput(BaseModel):
+        url: str = Field(..., description="URL to process")
+        timeout: int = Field(default=30, ge=1, le=300)
+        
+        @validator('url')
+        def validate_url(cls, v):
+            if not v.startswith(('http://', 'https://')):
+                raise ValueError('URL must start with http:// or https://')
+            return v
+
+    class MyTool(BaseTool):
+        args_schema: type[BaseModel] = MyToolInput
+    ```
+  </Accordion>
+
+  <Accordion title="Store Configuration in Environment">
+    Use environment variables for API keys and settings:
+
+    ```python
+    import os
+
+    class MyTool(BaseTool):
+        def __init__(self):
+            super().__init__()
+            self.api_key = os.getenv("MY_SERVICE_API_KEY")
+            if not self.api_key:
+                raise ValueError("MY_SERVICE_API_KEY not set")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Testing Your Tool
+
+<Steps>
+  <Step title="Create Test Script">
+    ```python test_my_tool.py
+    from my_agent.my_tool import MyCustomTool
+
+    def test_tool():
+        tool = MyCustomTool()
+        
+        # Test basic functionality
+        result = tool._run("test input")
+        print(f"Result: {result}")
+        
+        # Test error handling
+        try:
+            result = tool._run("")
+            print("Should have raised error!")
+        except ValueError as e:
+            print(f"Correctly raised error: {e}")
+
+    if __name__ == "__main__":
+        test_tool()
+    ```
+  </Step>
+
+  <Step title="Test in Chat Mode">
+    Run the agent in interactive mode and try your tool:
+
+    ```bash
+    poetry run python chatbot.py
+    # Select mode 1 (Interactive chat)
+    
+    # Then prompt the agent to use your tool
+    User: Use my_custom_tool to process "example data"
+    ```
+  </Step>
+
+  <Step title="Check Tool Registration">
+    Verify your tool is loaded by checking the output when starting the agent:
+
+    ```
+    Starting Agent...
+    Initializing LLM...
+    ...
+    my_custom_tool  # Your tool should appear here
+    ...
+    ```
+  </Step>
+</Steps>
+
+## Advanced: Creating Tool Toolkits
+
+For related tools, create a toolkit like `browser_agent/browser_toolkit.py`:
+
+```python my_agent/my_toolkit.py
+from langchain_core.tools import BaseToolkit
+from typing import List
+from langchain_core.tools import BaseTool
+from my_agent.tool1 import Tool1
+from my_agent.tool2 import Tool2
+from my_agent.tool3 import Tool3
+
+class MyToolkit(BaseToolkit):
+    """Collection of tools for my agent."""
+    
+    @classmethod
+    def from_llm(cls, llm):
+        """Create toolkit with LLM instance."""
+        return cls(llm=llm)
+    
+    def __init__(self, llm=None):
+        self.llm = llm
+    
+    def get_tools(self) -> List[BaseTool]:
+        """Return all tools in this toolkit."""
+        return [
+            Tool1(llm=self.llm),
+            Tool2(llm=self.llm),
+            Tool3(),
+        ]
+```
+
+Register the toolkit:
+
+```python chatbot.py
+from my_agent.my_toolkit import MyToolkit
+
+def create_agent_tools(llm, knowledge_base, podcast_knowledge_base, agent_kit, config):
+    tools = []
+    
+    if os.getenv("USE_MY_TOOLKIT", "true").lower() == "true":
+        my_toolkit = MyToolkit.from_llm(llm)
+        tools.extend(my_toolkit.get_tools())
+    
+    return tools
+```
+
+## Debugging Tools
+
+Enable detailed logging to debug tool execution:
+
+```python
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger(__name__)
+
+class MyTool(BaseTool):
+    def _run(self, input_text: str) -> str:
+        logger.debug(f"Tool called with input: {input_text}")
+        # Your implementation
+        logger.debug(f"Tool returning: {result}")
+        return result
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Knowledge Bases" icon="database" href="/guides/working-with-knowledge-bases">
+    Create knowledge bases for contextual tools
+  </Card>
+  <Card title="Core Actions" icon="bolt" href="/api/hyperbolic/rent-compute">
+    Learn from existing tool implementations
+  </Card>
+  <Card title="Hyperbolic Tools" icon="microchip" href="/api/hyperbolic/rent-compute">
+    GPU compute tool examples
+  </Card>
+  <Card title="Twitter Tools" icon="twitter" href="/tools/social/twitter-operations">
+    Social media integration patterns
+  </Card>
+</CardGroup>

@@ -1,0 +1,147 @@
+---
+title: Hyperbolic Tools Overview
+description: Access GPU compute resources, manage instances, and execute remote commands using Hyperbolic's decentralized infrastructure
+---
+
+The Hyperbolic toolkit provides AI agents with the ability to rent GPU compute resources, manage instances, and execute commands on remote servers through the Hyperbolic platform.
+
+## Available Tools
+
+The HyperbolicToolkit includes the following tools:
+
+<CardGroup cols={2}>
+  <Card title="Rent Compute" icon="server" href="/tools/hyperbolic/rent-compute">
+    Rent GPU instances on the Hyperbolic platform
+  </Card>
+  <Card title="Manage GPUs" icon="microchip" href="/tools/hyperbolic/manage-gpus">
+    Check available GPUs, monitor status, and terminate instances
+  </Card>
+  <Card title="SSH Access" icon="terminal" href="/tools/hyperbolic/ssh-access">
+    Connect to instances via SSH and execute remote commands
+  </Card>
+  <Card title="Billing" icon="credit-card" href="#billing-tools">
+    Check balance and spending history
+  </Card>
+</CardGroup>
+
+## Setup
+
+### Installation
+
+```bash
+pip install hyperbolic-langchain
+```
+
+### Configuration
+
+Set your Hyperbolic API key as an environment variable:
+
+```bash
+export HYPERBOLIC_API_KEY="your-api-key"
+```
+
+<Note>
+Get your API key from the [Hyperbolic Dashboard](https://app.hyperbolic.xyz)
+</Note>
+
+## Quick Start
+
+### Initialize the Toolkit
+
+```python
+from hyperbolic_langchain.agent_toolkits import HyperbolicToolkit
+from hyperbolic_langchain.utils import HyperbolicAgentkitWrapper
+
+# Initialize the wrapper
+hyperbolic = HyperbolicAgentkitWrapper()
+
+# Create the toolkit
+hyperbolic_toolkit = HyperbolicToolkit.from_hyperbolic_agentkit_wrapper(hyperbolic)
+
+# Get all available tools
+tools = hyperbolic_toolkit.get_tools()
+
+for tool in tools:
+    print(tool.name)
+```
+
+### Use with LangChain Agent
+
+```python
+from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import create_react_agent
+
+# Initialize LLM
+llm = ChatOpenAI(model="gpt-4")
+
+# Create agent with Hyperbolic tools
+agent_executor = create_react_agent(llm, tools)
+
+# Run the agent
+events = agent_executor.stream(
+    {"messages": [("user", "Rent me a GPU with 8 GPUs")]},
+    stream_mode="values",
+)
+
+for event in events:
+    event["messages"][-1].pretty_print()
+```
+
+## Tool List
+
+The toolkit provides these core tools:
+
+### Compute Management
+
+- **rent_compute** - Rent GPU instances from the marketplace
+- **get_available_gpus** - List all available GPU machines
+- **get_gpu_status** - Check status of your rented GPUs
+- **terminate_compute** - Terminate a rented instance
+
+### Remote Access
+
+- **ssh_connect** - Connect to a GPU instance via SSH
+- **remote_shell** - Execute commands on connected instances
+
+### Billing Tools
+
+- **get_current_balance** - Check your Hyperbolic credit balance
+- **get_spend_history** - View detailed spending history
+- **link_wallet_address** - Link a crypto wallet for payments
+
+<Warning>
+The Hyperbolic toolkit can create, modify, and delete compute instances. Always review agent actions before execution in production environments.
+</Warning>
+
+## Security Considerations
+
+The HyperbolicToolkit has access to:
+- Creating and terminating compute instances
+- Accessing servers via SSH
+- Executing arbitrary commands on remote servers
+- Managing billing and payments
+
+See [Security Best Practices](https://python.langchain.com/docs/security) for more information on securing your agents.
+
+## Pricing
+
+<Note>
+All GPU prices on the Hyperbolic platform are shown in **cents per hour**. For example, a price of 500 means $5.00 per hour.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Rent Compute" icon="rocket" href="/tools/hyperbolic/rent-compute">
+    Learn how to rent GPU instances
+  </Card>
+  <Card title="Manage GPUs" icon="sliders" href="/tools/hyperbolic/manage-gpus">
+    Monitor and control your instances
+  </Card>
+  <Card title="SSH Access" icon="key" href="/tools/hyperbolic/ssh-access">
+    Connect and execute remote commands
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/hyperbolic/rent-compute">
+    View full API documentation
+  </Card>
+</CardGroup>

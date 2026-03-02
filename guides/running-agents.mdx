@@ -1,0 +1,504 @@
+---
+title: "Running Agents"
+description: "Run Hyperbolic AgentKit in interactive chat mode, voice agent mode, or autonomous Twitter automation"
+---
+
+## Overview
+
+Hyperbolic AgentKit supports three primary modes of operation:
+
+1. **Interactive Chat Mode** - Terminal-based conversation interface
+2. **Voice Agent Mode** - Web-based voice interaction
+3. **Twitter Automation** - Autonomous social media engagement
+
+Each mode is designed for different use cases and interaction patterns.
+
+## Interactive Chat Mode
+
+The terminal interface provides direct text-based interaction with your agent.
+
+### Starting Chat Mode
+
+<Steps>
+  <Step title="Launch the Chatbot">
+    ```bash
+    poetry run python chatbot.py
+    ```
+  </Step>
+
+  <Step title="Configure Knowledge Bases">
+    The agent will prompt you to initialize knowledge bases:
+
+    ```
+    Do you want to initialize the Twitter knowledge base? (y/n):
+    ```
+
+    If you select **yes**, you'll have options to:
+    - Clear existing knowledge base
+    - Update with new KOL tweets
+
+    Then for podcast knowledge base:
+    ```
+    Do you want to initialize the Podcast knowledge base? (y/n):
+    ```
+
+    <Note>
+      Knowledge bases enhance your agent's contextual awareness. See the [Working with Knowledge Bases](/guides/working-with-knowledge-bases) guide for details.
+    </Note>
+  </Step>
+
+  <Step title="Select Chat Mode">
+    Choose mode 1 when prompted:
+
+    ```
+    Available modes:
+    1. Interactive chat mode
+    2. Character Twitter Automation
+
+    Choose a mode (enter number): 1
+    ```
+  </Step>
+</Steps>
+
+### Using Chat Mode
+
+From `chatbot.py:677-726`, the chat mode supports:
+
+<CodeGroup>
+```bash User Commands
+# Exit the chat
+exit
+
+# Check agent status
+status
+
+# Example interactions
+User: What GPU options are available on Hyperbolic?
+User: Create a tweet about blockchain technology
+User: Research the latest developments in AI
+```
+</CodeGroup>
+
+### Available Commands
+
+- **exit** - Terminate the chat session
+- **status** - Verify agent responsiveness
+- Any natural language prompt to utilize agent tools
+
+### Example Session
+
+```bash
+Starting chat mode... Type 'exit' to end.
+Commands:
+  exit     - Exit the chat
+  status   - Check if agent is responsive
+
+User: Check available GPU options
+
+[Agent uses get_available_gpus tool]
+
+AI: I found several GPU options available...
+  - H100 (8x) on cluster-1
+  - A100 (4x) on cluster-2
+  ...
+
+-------------------
+```
+
+## Voice Agent Mode
+
+The voice agent provides a web-based interface with real-time voice interaction.
+
+### Architecture
+
+From `server/src/server/app.py:83-88`, the voice agent uses:
+- **Model**: `gpt-4o-realtime-preview` or `gpt-4o-mini-realtime-preview`
+- **Protocol**: WebSocket for real-time communication
+- **Voice Options**: alloy, ash, ballad, coral, echo, sage, shimmer, verse
+
+### Starting Voice Agent
+
+<Steps>
+  <Step title="Launch Server">
+    ```bash
+    PYTHONPATH=$PWD/server/src poetry run python server/src/server/app.py
+    ```
+
+    <Warning>
+      Ensure `OPENAI_API_KEY` is set in your `.env` file. Voice agent requires OpenAI's realtime API.
+    </Warning>
+  </Step>
+
+  <Step title="Access Web Interface">
+    Open your browser and navigate to:
+
+    ```
+    http://localhost:3000
+    ```
+  </Step>
+
+  <Step title="Interact with Voice">
+    - Click the microphone button to start voice input
+    - Speak your request naturally
+    - Agent responds with voice output
+  </Step>
+</Steps>
+
+### Voice Agent Features
+
+The voice agent implementation in `server/src/server/app.py:36-92` includes:
+
+- **Connection Limiting**: Maximum 10 concurrent connections per instance
+- **Character Integration**: Uses same character configuration as chat mode
+- **Tool Access**: Full access to registered agent tools
+- **Real-time Streaming**: Low-latency voice interaction
+
+### Character-Specific Voice Endpoints
+
+You can run multiple voice agents with different characters:
+
+```python server/src/server/app.py:36-41
+async def rolypoly_websocket_endpoint(websocket: WebSocket):
+    await websocket_endpoint(websocket, "characters/rolypoly.json")
+
+async def chainyoda_websocket_endpoint(websocket: WebSocket):
+    await websocket_endpoint(websocket, "characters/chainyoda.json")
+```
+
+## Gradio Web Interface
+
+An alternative web interface using Gradio:
+
+```bash
+poetry run python gradio_ui.py
+```
+
+Access at `http://localhost:7860`
+
+This provides a simple text-based web chat interface without voice capabilities.
+
+## Twitter Automation Mode
+
+Autonomous mode enables your agent to independently interact on Twitter/X.
+
+### Capabilities
+
+From `chatbot.py:728-1002`, the Twitter automation performs:
+
+1. **Original Content Creation** - Posts tweets based on knowledge base insights
+2. **Mention Monitoring** - Checks and responds to @mentions
+3. **KOL Engagement** - Interacts with key opinion leaders
+
+### Starting Twitter Automation
+
+<Steps>
+  <Step title="Configure Twitter Credentials">
+    Ensure all Twitter API keys are set in `.env`:
+
+    ```bash .env
+    TWITTER_ACCESS_TOKEN=your_access_token
+    TWITTER_API_KEY=your_api_key
+    TWITTER_API_SECRET=your_api_secret
+    TWITTER_ACCESS_TOKEN_SECRET=your_token_secret
+    TWITTER_BEARER_TOKEN=your_bearer_token
+    TWITTER_CLIENT_ID=your_client_id
+    TWITTER_CLIENT_SECRET=your_client_secret
+    ```
+  </Step>
+
+  <Step title="Configure Character with KOL List">
+    Edit your character file to include KOLs to interact with:
+
+    ```json characters/my-character.json
+    {
+      "name": "YourAgent",
+      "accountid": "your_twitter_user_id",
+      "kol_list": [
+        {
+          "username": "elonmusk",
+          "user_id": "44196397"
+        },
+        {
+          "username": "vitalikbuterin",
+          "user_id": "295218901"
+        }
+      ]
+    }
+    ```
+  </Step>
+
+  <Step title="Launch Automation">
+    ```bash
+    poetry run python chatbot.py
+    ```
+
+    Select mode 2:
+    ```
+    Available modes:
+    1. Interactive chat mode
+    2. Character Twitter Automation
+
+    Choose a mode (enter number): 2
+    ```
+  </Step>
+</Steps>
+
+### Automation Behavior
+
+From `chatbot.py:761-912`, each cycle performs:
+
+#### Task 1: Create Original Tweet
+
+```python chatbot.py:800-856
+# 1. Query recent tweets from configured accounts
+# 2. Query podcast knowledge base with generated topic
+# 3. Analyze context from both sources
+# 4. Generate and post original tweet (< 280 characters)
+```
+
+**Tweet Guidelines**:
+- Ideal length: Less than 70 characters
+- Maximum: 280 characters
+- No emojis (unless character specifies)
+- Evergreen language for podcast references
+
+#### Task 2: Check and Reply to Mentions
+
+```python chatbot.py:858-886
+# 1. Get new mentions using get_mentions()
+# 2. Check if already replied using has_replied_to()
+# 3. Analyze mention content and sentiment
+# 4. Craft relevant response
+# 5. Reply using reply_to_tweet()
+# 6. Mark as replied using add_replied_to()
+```
+
+#### Task 3: Engage with KOLs
+
+```python chatbot.py:888-912
+# 1. Select random KOLs from character's kol_list
+# 2. Get recent tweets from each KOL
+# 3. Identify relevant tweet to reply to
+# 4. Generate contextual reply
+# 5. Post reply using reply_to_tweet()
+```
+
+### Automation Timing
+
+From `twitter_agent/twitter_state.py`, the system uses:
+
+```python
+MENTION_CHECK_INTERVAL = 3600  # 1 hour between cycles
+MAX_MENTIONS_PER_INTERVAL = 10  # Maximum mentions to process
+```
+
+The agent:
+- Runs immediately on first start
+- Waits `MENTION_CHECK_INTERVAL` seconds between cycles
+- Saves state between runs to avoid duplicate replies
+
+### State Management
+
+The Twitter automation tracks:
+- **Last mention ID** - Prevents duplicate mention processing
+- **Replied tweets** - Stored in `twitter_state.json`
+- **Reposted tweets** - Tracks retweets to avoid duplicates
+- **Last check time** - Enforces rate limiting
+
+### Safety Features
+
+From `chatbot.py:989-1002`, the automation includes:
+
+```python
+try:
+    # Automation logic
+except KeyboardInterrupt:
+    print_system("\nSaving state and exiting...")
+    twitter_state.save()
+    sys.exit(0)
+except Exception as e:
+    print_error(f"Unexpected error: {str(e)}")
+    print_system("Continuing after error...")
+    await asyncio.sleep(MENTION_CHECK_INTERVAL)
+```
+
+- **Graceful shutdown** - Saves state on Ctrl+C
+- **Error recovery** - Continues after exceptions
+- **State persistence** - Preserves reply history
+
+## Mode Comparison
+
+<CardGroup cols={3}>
+  <Card title="Chat Mode" icon="terminal">
+    **Best for:**
+    - Development and testing
+    - Direct agent interaction
+    - Tool experimentation
+
+    **Pros:**
+    - Full tool access
+    - Detailed output
+    - Easy debugging
+
+    **Cons:**
+    - Requires terminal access
+    - No voice interaction
+  </Card>
+
+  <Card title="Voice Agent" icon="microphone">
+    **Best for:**
+    - User demonstrations
+    - Natural conversations
+    - Accessibility
+
+    **Pros:**
+    - Natural voice interaction
+    - Web-based interface
+    - Low latency
+
+    **Cons:**
+    - Requires OpenAI API
+    - Limited to realtime models
+    - Connection limits
+  </Card>
+
+  <Card title="Twitter Automation" icon="robot">
+    **Best for:**
+    - Social media presence
+    - Community engagement
+    - Content distribution
+
+    **Pros:**
+    - Fully autonomous
+    - Knowledge base integration
+    - State persistence
+
+    **Cons:**
+    - Twitter API required
+    - Rate limits apply
+    - Needs monitoring
+  </Card>
+</CardGroup>
+
+## Advanced Usage
+
+### Custom Mode Selection
+
+You can modify `chatbot.py:641-653` to add new modes:
+
+```python
+def choose_mode():
+    """Choose whether to run in autonomous or chat mode."""
+    while True:
+        print("\nAvailable modes:")
+        print("1. Interactive chat mode")
+        print("2. Character Twitter Automation")
+        print("3. Custom Mode")  # Add your mode
+
+        choice = input("\nChoose a mode (enter number): ").lower().strip()
+        if choice in ["1"]:
+            return "chat"
+        elif choice in ["2"]:
+            return "twitter_automation"
+        elif choice in ["3"]:
+            return "custom_mode"
+```
+
+### Running Multiple Agents
+
+You can run multiple agents simultaneously with different characters:
+
+```bash
+# Terminal 1: Run agent with character A
+CHARACTER_FILE=characters/agent-a.json poetry run python chatbot.py
+
+# Terminal 2: Run agent with character B  
+CHARACTER_FILE=characters/agent-b.json poetry run python chatbot.py
+```
+
+## Monitoring and Logging
+
+### Enable LangChain Tracing
+
+For detailed execution traces:
+
+```bash .env
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+LANGCHAIN_API_KEY=your_api_key
+LANGCHAIN_PROJECT=hyperbolic-agentkit
+```
+
+View traces in the LangSmith dashboard to debug tool calls and agent reasoning.
+
+### Console Output
+
+The framework provides color-coded output from `base_utils/utils.py`:
+
+- **Blue** - User input
+- **Green** - AI responses
+- **Yellow** - System messages
+- **Red** - Errors
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Agent Not Responding">
+    Check recursion limits in `chatbot.py:614-622`:
+
+    ```python
+    runnable_config = RunnableConfig(
+        recursion_limit=200,  # Increase if needed
+        configurable={...}
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Twitter API Rate Limits">
+    The framework handles rate limits automatically with `wait_on_rate_limit=True` in `twitter_agent/custom_twitter_actions.py:24-31`.
+
+    If you still hit limits:
+    - Increase `MENTION_CHECK_INTERVAL`
+    - Reduce number of KOLs
+    - Lower `TWEETS_PER_KOL` in knowledge base updates
+  </Accordion>
+
+  <Accordion title="Voice Agent Connection Issues">
+    From `server/src/server/app.py:48-59`, check:
+    - Maximum 10 concurrent connections per instance
+    - Valid OpenAI API key with realtime access
+    - WebSocket connection not blocked by firewall
+  </Accordion>
+
+  <Accordion title="Tool Execution Errors">
+    Enable debug output:
+
+    ```python
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    ```
+
+    Check tool registration in `chatbot.py:624-625`:
+    ```python
+    for tool in tools:
+        print_system(tool.name)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating Custom Tools" icon="wrench" href="/guides/creating-custom-tools">
+    Extend agent capabilities with new tools
+  </Card>
+  <Card title="Knowledge Bases" icon="database" href="/guides/working-with-knowledge-bases">
+    Enhance context with knowledge bases
+  </Card>
+  <Card title="Core Actions" icon="bolt" href="/api/hyperbolic/rent-compute">
+    Explore built-in agent actions
+  </Card>
+  <Card title="Hyperbolic Tools" icon="microchip" href="/api/hyperbolic/rent-compute">
+    Use GPU compute capabilities
+  </Card>
+</CardGroup>

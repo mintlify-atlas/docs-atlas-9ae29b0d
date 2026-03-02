@@ -1,0 +1,198 @@
+---
+title: Introduction
+description: Build powerful AI agents with GPU compute, blockchain, and social media capabilities
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.svg"
+  alt="Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.svg"
+  alt="Hero Dark"
+/>
+
+## Welcome to Hyperbolic AgentKit
+
+Hyperbolic AgentKit is a comprehensive framework for building AI agents that combine GPU compute resources, blockchain operations, social media integration, and advanced content generation capabilities. Built on top of LangChain and inspired by Coinbase's CDP AgentKit, this framework enables you to create sophisticated autonomous agents with minimal code.
+
+## Core Capabilities
+
+<CardGroup cols={2}>
+  <Card
+    title="GPU Compute Operations"
+    icon="microchip"
+    href="#gpu-compute"
+  >
+    Rent and manage GPU resources on Hyperbolic's decentralized infrastructure
+  </Card>
+  <Card
+    title="Blockchain Integration"
+    icon="link"
+    href="#blockchain"
+  >
+    Deploy tokens, manage wallets, and execute transactions via CDP
+  </Card>
+  <Card
+    title="Social Media Tools"
+    icon="twitter"
+    href="#social-media"
+  >
+    Post tweets, manage interactions, and build knowledge bases from Twitter
+  </Card>
+  <Card
+    title="Content Generation"
+    icon="pen-to-square"
+    href="#content-generation"
+  >
+    Create research-backed articles with web search and style emulation
+  </Card>
+</CardGroup>
+
+## GPU Compute
+
+The framework provides seamless integration with Hyperbolic's GPU marketplace, enabling your agents to:
+
+- **Discover GPUs**: Query available GPU instances with pricing and specifications
+- **Rent Resources**: Provision GPU compute on-demand for AI workloads
+- **Manage Instances**: Monitor status, check billing history, and terminate instances
+- **SSH Access**: Connect directly to GPU machines and execute commands remotely
+- **Payment Integration**: Connect Ethereum wallets and pay with USDC, USDT, or DAI on Base network
+
+```python
+from hyperbolic_langchain import HyperbolicToolkit, HyperbolicAgentkitWrapper
+
+# Initialize Hyperbolic tools
+hyperbolic = HyperbolicAgentkitWrapper()
+toolkit = HyperbolicToolkit.from_hyperbolic_agentkit_wrapper(hyperbolic)
+tools = toolkit.get_tools()
+
+# Tools available:
+# - rent_compute
+# - get_available_gpus
+# - terminate_compute
+# - get_gpu_status
+# - get_spend_history
+# - get_current_balance
+# - ssh_access
+# - link_wallet_address
+```
+
+## Blockchain
+
+Powered by Coinbase's CDP AgentKit, your agents can interact with blockchain networks:
+
+- Deploy ERC-20 tokens and NFTs
+- Create and manage crypto wallets
+- Execute on-chain transactions
+- Interact with smart contracts
+- Access DeFi protocols (Pyth, WETH)
+
+## Social Media
+
+Build agents that actively participate in social media conversations:
+
+- **Twitter Integration**: Post, reply, retweet, and delete tweets
+- **Knowledge Bases**: Scrape and analyze tweets from key opinion leaders (KOLs)
+- **State Management**: Track replies and reposts to avoid duplicates
+- **Autonomous Posting**: Schedule and automate social media interactions
+
+## Content Generation
+
+The Writing Agent provides sophisticated content creation capabilities:
+
+- **Web Research**: Automatically research topics using Tavily API
+- **Style Emulation**: Analyze reference documents and mimic writing styles
+- **Citation Management**: Generate properly formatted APA citations
+- **Configurable Output**: Control article length, tone, and format
+
+```python
+from writing_agent import WritingTool
+
+writing_tool = WritingTool(llm=llm)
+
+# Agent can now write research-backed articles
+result = await writing_tool._arun(
+    query="Write an article about quantum computing",
+    target_length=1500,
+    output_file="article.txt"
+)
+```
+
+## Additional Features
+
+<AccordionGroup>
+  <Accordion title="Browser Automation">
+    Use Playwright-powered tools to automate browser interactions for web scraping and data collection.
+  </Accordion>
+  <Accordion title="Podcast Processing">
+    Transcribe video files using Gemini and process podcast transcripts into queryable knowledge bases.
+  </Accordion>
+  <Accordion title="Character Configuration">
+    Customize your agent's personality, communication style, and behavior through JSON configuration files.
+  </Accordion>
+  <Accordion title="Multiple Interfaces">
+    Run your agent via terminal chat, Gradio web UI, or WebSocket-powered voice interface.
+  </Accordion>
+</AccordionGroup>
+
+## Architecture
+
+Hyperbolic AgentKit is built on a modular architecture:
+
+```
+Hyperbolic-AgentKit/
+├── hyperbolic_agentkit_core/    # Core GPU compute actions
+├── hyperbolic_langchain/        # LangChain integrations
+├── twitter_agent/               # Twitter API and knowledge base
+├── browser_agent/               # Browser automation toolkit
+├── writing_agent/               # Content generation system
+├── podcast_agent/               # Video/podcast processing
+└── characters/                  # Agent personality configs
+```
+
+Each module is independently configurable through environment variables, allowing you to enable only the capabilities you need.
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="GPU Compute Broker" icon="server">
+    Build agents that help users discover, rent, and manage GPU resources for AI/ML workloads
+  </Card>
+  <Card title="Social Media Manager" icon="megaphone">
+    Create autonomous agents that maintain social media presence and engage with communities
+  </Card>
+  <Card title="Research Assistant" icon="book">
+    Deploy agents that research topics, synthesize information, and generate comprehensive reports
+  </Card>
+  <Card title="DeFi Automation" icon="coins">
+    Build trading bots and DeFi agents with blockchain interaction capabilities
+  </Card>
+</CardGroup>
+
+## Getting Started
+
+Ready to build your first agent? Follow our quickstart guide:
+
+<Card
+  title="Quickstart Guide"
+  icon="rocket"
+  href="/quickstart"
+>
+  Get up and running with a working agent in under 5 minutes
+</Card>
+
+## Community and Support
+
+This project extends the work of:
+
+- [CDP AgentKit](https://github.com/coinbase/cdp-agentkit) by Coinbase (Apache 2.0)
+- [React Voice Agent](https://github.com/langchain-ai/react-voice-agent) by LangChain AI (MIT)
+
+For support and resources:
+
+- [Hyperbolic Documentation](https://docs.hyperbolic.xyz/docs/getting-started)
+- [CDP Documentation](https://docs.cdp.coinbase.com/agentkit/docs/welcome)
+- [GitHub Issues](https://github.com/yourusername/Hyperbolic-AgentKit/issues)

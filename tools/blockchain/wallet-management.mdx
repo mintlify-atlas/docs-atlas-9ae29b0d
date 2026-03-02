@@ -1,0 +1,235 @@
+---
+title: "Wallet Management"
+description: "Create, configure, and manage blockchain wallets using the CDP Wallet Provider"
+---
+
+## Overview
+
+The CDP Wallet Provider handles wallet creation, configuration, and persistence. Wallets are automatically created on first run and persisted to local storage for reuse.
+
+## Wallet Provider Configuration
+
+The `CdpWalletProvider` manages wallet lifecycle and configuration:
+
+```python
+from coinbase_agentkit import CdpWalletProvider, CdpWalletProviderConfig
+
+wallet_provider = CdpWalletProvider(CdpWalletProviderConfig(
+    api_key_name=os.getenv("CDP_API_KEY_NAME"),
+    api_key_private=os.getenv("CDP_API_KEY_PRIVATE"),
+    network_id=os.getenv("CDP_NETWORK_ID", "base-mainnet"),
+    wallet_data=wallet_data if wallet_data else None
+))
+```
+
+### Configuration Parameters
+
+- **api_key_name**: Your CDP API key name
+- **api_key_private**: Your CDP private key
+- **network_id**: Target blockchain network (default: `base-mainnet`)
+- **wallet_data**: Previously exported wallet data for persistence (optional)
+
+## Wallet Persistence
+
+From `chatbot.py:446-478`, wallets are automatically persisted:
+
+```python
+wallet_data_file = "wallet_data.txt"
+
+# Load existing wallet data if available
+wallet_data = None
+if os.path.exists(wallet_data_file):
+    with open(wallet_data_file) as f:
+        wallet_data = f.read()
+
+# Configure wallet provider with existing or new wallet
+wallet_provider = CdpWalletProvider(CdpWalletProviderConfig(
+    api_key_name=os.getenv("CDP_API_KEY_NAME"),
+    api_key_private=os.getenv("CDP_API_KEY_PRIVATE"),
+    network_id=os.getenv("CDP_NETWORK_ID", "base-mainnet"),
+    wallet_data=wallet_data if wallet_data else None
+))
+
+# Save wallet data if this is a new wallet
+if not wallet_data:
+    wallet_data = json.dumps(wallet_provider.export_wallet().to_dict())
+    with open(wallet_data_file, "w") as f:
+        f.write(wallet_data)
+```
+
+## Wallet Export and Import
+
+### Exporting Wallet Data
+
+Export wallet data for backup or transfer:
+
+```python
+# Export wallet to dictionary
+wallet_dict = wallet_provider.export_wallet().to_dict()
+
+# Serialize to JSON
+wallet_json = json.dumps(wallet_dict)
+
+# Save to file
+with open("wallet_data.txt", "w") as f:
+    f.write(wallet_json)
+```
+
+### Importing Wallet Data
+
+Restore a wallet from previously exported data:
+
+```python
+# Load wallet data from file
+with open("wallet_data.txt", "r") as f:
+    wallet_data = f.read()
+
+# Create provider with existing wallet
+wallet_provider = CdpWalletProvider(CdpWalletProviderConfig(
+    api_key_name=os.getenv("CDP_API_KEY_NAME"),
+    api_key_private=os.getenv("CDP_API_KEY_PRIVATE"),
+    network_id=os.getenv("CDP_NETWORK_ID", "base-mainnet"),
+    wallet_data=wallet_data
+))
+```
+
+## Action Providers Integration
+
+Wallet providers work with action providers to enable specific operations:
+
+```python
+from coinbase_agentkit import (
+    AgentKit,
+    AgentKitConfig,
+    wallet_action_provider,
+    cdp_wallet_action_provider,
+)
+
+agent_kit = AgentKit(AgentKitConfig(
+    wallet_provider=wallet_provider,
+    action_providers=[
+        wallet_action_provider(),      # General wallet operations
+        cdp_wallet_action_provider(),  # CDP-specific operations
+    ]
+))
+```
+
+## Network Configuration
+
+Configure the blockchain network for your wallet:
+
+### Mainnet Networks
+
+```bash
+# Base Mainnet (default)
+CDP_NETWORK_ID=base-mainnet
+
+# Ethereum Mainnet
+CDP_NETWORK_ID=ethereum-mainnet
+```
+
+### Testnet Networks
+
+```bash
+# Base Sepolia Testnet
+CDP_NETWORK_ID=base-sepolia
+
+# Ethereum Sepolia Testnet
+CDP_NETWORK_ID=ethereum-sepolia
+```
+
+## Security Best Practices
+
+### Protect Your API Keys
+
+Store API keys securely in environment variables:
+
+```bash
+# .env file
+CDP_API_KEY_NAME=your_key_name
+CDP_API_KEY_PRIVATE=your_private_key
+```
+
+Load using `python-dotenv`:
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+### Wallet Data Security
+
+- **Never commit** `wallet_data.txt` to version control
+- Add to `.gitignore`:
+  ```
+  wallet_data.txt
+  *.wallet
+  ```
+- Store backups in secure, encrypted storage
+- Use different wallets for development and production
+
+## Common Wallet Operations
+
+### Check Wallet Address
+
+Access wallet information through the provider:
+
+```python
+wallet = wallet_provider.export_wallet()
+address = wallet.default_address
+print(f"Wallet address: {address}")
+```
+
+### Multiple Wallets
+
+Manage multiple wallets by using different data files:
+
+```python
+def load_wallet(wallet_name: str):
+    wallet_file = f"wallet_{wallet_name}.txt"
+    wallet_data = None
+    
+    if os.path.exists(wallet_file):
+        with open(wallet_file) as f:
+            wallet_data = f.read()
+    
+    wallet_provider = CdpWalletProvider(CdpWalletProviderConfig(
+        api_key_name=os.getenv("CDP_API_KEY_NAME"),
+        api_key_private=os.getenv("CDP_API_KEY_PRIVATE"),
+        network_id=os.getenv("CDP_NETWORK_ID", "base-mainnet"),
+        wallet_data=wallet_data
+    ))
+    
+    # Save new wallet
+    if not wallet_data:
+        wallet_data = json.dumps(wallet_provider.export_wallet().to_dict())
+        with open(wallet_file, "w") as f:
+            f.write(wallet_data)
+    
+    return wallet_provider
+```
+
+## Troubleshooting
+
+### Wallet Not Loading
+
+If wallet data fails to load:
+
+1. Check file permissions on `wallet_data.txt`
+2. Verify JSON format is valid
+3. Ensure CDP credentials are correct
+4. Check network connectivity to CDP API
+
+### Invalid Credentials
+
+If you see authentication errors:
+
+1. Verify `CDP_API_KEY_NAME` matches your CDP account
+2. Check `CDP_API_KEY_PRIVATE` is correctly formatted
+3. Ensure API key has necessary permissions
+4. Confirm API key is active in CDP dashboard
+
+## Next Steps
+
+- [Token Operations](/tools/blockchain/token-operations) - Learn about token transfers and operations
+- [Blockchain Overview](/tools/blockchain/overview) - Understand the complete blockchain integration

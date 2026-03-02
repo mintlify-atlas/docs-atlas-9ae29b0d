@@ -1,0 +1,100 @@
+---
+title: "Get GPU Status"
+description: "Get the status and SSH commands of your currently rented GPUs"
+---
+
+## Overview
+
+The `get_gpu_status` action retrieves the status and SSH connection information for all your currently rented GPU instances on the Hyperbolic platform.
+
+## Function Signature
+
+```python
+def get_gpu_status() -> str
+```
+
+## Input Schema
+
+This action takes no input parameters.
+
+## Response
+
+Returns the raw JSON response from the Hyperbolic API containing instance details.
+
+<ResponseField name="response" type="object">
+  JSON object containing an array of your rented instances with details including:
+  - Instance ID
+  - Status (starting, running, terminated, etc.)
+  - SSH connection information
+  - GPU configuration
+  - Pricing information
+  - Runtime details
+</ResponseField>
+
+## API Endpoint
+
+```
+GET https://api.hyperbolic.xyz/v1/marketplace/instances
+```
+
+## Example Usage
+
+```python
+from hyperbolic_agentkit_core.actions import get_gpu_status
+
+# Get status of all your rented instances
+status = get_gpu_status()
+print(status)
+```
+
+## Example Response
+
+```json
+{
+  "instances": [
+    {
+      "id": "respectful-rose-pelican",
+      "status": "running",
+      "ssh_command": "ssh -p 2222 user@gpu-node-1.hyperbolic.xyz",
+      "cluster_name": "us-east-1",
+      "node_name": "node-abc123",
+      "gpu_count": 2,
+      "pricing": {
+        "price": {
+          "amount": 250
+        }
+      },
+      "started_at": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+## Important Notes
+
+- Authorization key (`HYPERBOLIC_API_KEY`) is required for this operation
+- GPU prices in the response are in **cents per hour**
+- **Status values:**
+  - `starting`: GPU is not ready yet. Check status again after ~5 seconds
+  - `running`: GPU is ready and accessible
+  - `terminated`: GPU has been terminated
+- Once status is `running`, you can:
+  - Access the instance through the `ssh_access` action
+  - Run commands through the `remote_shell` action
+- Use the instance ID to terminate instances with the `terminate_compute` action
+
+## Status Monitoring
+
+When an instance shows `"status": "starting"`, it means the GPU is still being provisioned. You should:
+
+1. Wait approximately 5 seconds
+2. Call `get_gpu_status` again to check if status has changed to `running`
+3. Repeat until the instance is ready
+
+## Related Actions
+
+- [Rent Compute](/api/hyperbolic/rent-compute) - Rent new GPU instances
+- [SSH Access](/api/hyperbolic/ssh-access) - Connect to running instances
+- [Remote Shell](/api/hyperbolic/remote-shell) - Execute commands on instances
+- [Terminate Compute](/api/hyperbolic/terminate-compute) - Terminate instances
+- [Get Spend History](/api/hyperbolic/get-spend-history) - View rental billing history

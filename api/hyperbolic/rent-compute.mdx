@@ -1,0 +1,81 @@
+---
+title: "Rent Compute"
+description: "Rent GPU compute resources on the Hyperbolic platform"
+---
+
+## Overview
+
+The `rent_compute` action allows you to rent GPU machines on the Hyperbolic platform. This function creates a marketplace instance with specified GPU resources.
+
+## Function Signature
+
+```python
+def rent_compute(cluster_name: str, node_name: str, gpu_count: str) -> str
+```
+
+## Input Schema
+
+<ParamField path="cluster_name" type="string" required>
+  The cluster name that the user wants to rent from. Obtain this from the `get_available_gpus` action.
+</ParamField>
+
+<ParamField path="node_name" type="string" required>
+  The node ID that the user wants to rent. Obtain this from the `get_available_gpus` action.
+</ParamField>
+
+<ParamField path="gpu_count" type="string" required>
+  The number of GPUs to allocate from the node.
+</ParamField>
+
+## Response
+
+Returns a formatted JSON string containing the API response with instance details.
+
+<ResponseField name="response" type="string">
+  A formatted JSON string representation of the created marketplace instance, including instance ID, status, and configuration details.
+</ResponseField>
+
+## API Endpoint
+
+```
+POST https://api.hyperbolic.xyz/v1/marketplace/instances/create
+```
+
+## Example Usage
+
+```python
+from hyperbolic_agentkit_core.actions import rent_compute
+
+# Rent 2 GPUs from a specific cluster and node
+result = rent_compute(
+    cluster_name="us-east-1",
+    node_name="node-12345",
+    gpu_count="2"
+)
+
+print(result)
+```
+
+## Important Notes
+
+- All inputs must be provided to process the rental
+- If you haven't used the `get_available_gpus` action in the conversation, always use it first to get valid cluster and node names
+- After renting, you can find the instance through the `get_gpu_status` action
+- Access the instance through the `ssh_access` action
+- Run commands on it through the `remote_shell` action
+- Requires `HYPERBOLIC_API_KEY` environment variable
+
+## Error Handling
+
+The function raises:
+
+- `ValueError`: If any required parameter (cluster_name, node_name, gpu_count) is missing or invalid
+- `requests.exceptions.RequestException`: If the API request fails, including HTTP errors with response details
+
+## Related Actions
+
+- [Get Available GPUs](/api/hyperbolic/get-available-gpus) - List available GPU options
+- [Get GPU Status](/api/hyperbolic/get-gpu-status) - Check status of rented instances
+- [SSH Access](/api/hyperbolic/ssh-access) - Connect to rented instances
+- [Remote Shell](/api/hyperbolic/remote-shell) - Execute commands on instances
+- [Terminate Compute](/api/hyperbolic/terminate-compute) - Terminate rented instances

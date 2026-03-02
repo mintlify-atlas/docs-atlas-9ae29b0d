@@ -1,0 +1,183 @@
+---
+title: "Link Wallet Address"
+description: "Link a wallet address to your Hyperbolic account for crypto payments"
+---
+
+## Overview
+
+The `link_wallet_address` action links an Ethereum wallet address to your Hyperbolic account, enabling you to add credits via cryptocurrency payments on the Base network.
+
+## Function Signature
+
+```python
+def link_wallet_address(wallet_address: str) -> str
+```
+
+## Input Schema
+
+<ParamField path="wallet_address" type="string" required>
+  The Ethereum wallet address to link to your Hyperbolic account (e.g., "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb").
+</ParamField>
+
+## Response
+
+Returns a formatted JSON string representation of the API response.
+
+<ResponseField name="response" type="string">
+  A formatted JSON string confirming the wallet address has been linked to your account.
+</ResponseField>
+
+## API Endpoint
+
+```
+POST https://api.hyperbolic.xyz/settings/crypto-address
+```
+
+## Example Usage
+
+```python
+from hyperbolic_agentkit_core.actions import link_wallet_address
+
+# Link your Ethereum wallet
+result = link_wallet_address(
+    wallet_address="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+)
+print(result)
+
+# After linking, send USDC/USDT/DAI on Base network to:
+# 0xd3cB24E0Ba20865C530831C85Bd6EbC25f6f3B60
+```
+
+## Example Response
+
+```json
+{
+  "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+  "status": "linked",
+  "message": "Wallet address successfully linked"
+}
+```
+
+## Adding Credits After Linking
+
+Once your wallet is linked, you can add credits to your Hyperbolic account:
+
+### Supported Tokens
+
+- **USDC** (USD Coin)
+- **USDT** (Tether)
+- **DAI**
+
+### Network
+
+- **Base Network** (Ethereum L2)
+
+### Hyperbolic Deposit Address
+
+```
+0xd3cB24E0Ba20865C530831C85Bd6EbC25f6f3B60
+```
+
+### Steps to Add Credits
+
+1. Link your wallet using this action
+2. Send USDC, USDT, or DAI on Base network to the Hyperbolic deposit address
+3. Funds are available **immediately** after transaction confirmation
+4. Use credits to rent GPU compute resources
+
+## Complete Workflow Example
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    link_wallet_address,
+    get_current_balance,
+    rent_compute
+)
+
+# 1. Link your wallet
+link_result = link_wallet_address(
+    wallet_address="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+)
+print(link_result)
+
+# 2. Inform user to send funds
+print("""
+Please send USDC, USDT, or DAI on Base network to:
+0xd3cB24E0Ba20865C530831C85Bd6EbC25f6f3B60
+
+Funds will be available immediately after confirmation.
+""")
+
+# 3. Check balance after sending funds
+balance = get_current_balance()
+print(balance)
+
+# 4. Rent GPU compute with your credits
+rent_result = rent_compute(
+    cluster_name="us-east-1",
+    node_name="node-abc123",
+    gpu_count="2"
+)
+print(rent_result)
+```
+
+## Important Notes
+
+- All inputs must be provided to process the linking
+- The user is identified by the `HYPERBOLIC_API_KEY` in the request header
+- **Supported networks**: Base network only
+- **Supported tokens**: USDC, USDT, DAI
+- Funds appear immediately after blockchain confirmation
+- You can only link one wallet address per Hyperbolic account
+- Linking a new address will replace the previous one
+
+## Error Handling
+
+The function raises:
+
+- `ValueError`: If wallet_address is missing or invalid format
+- `requests.exceptions.RequestException`: If the API request fails, with detailed error information
+
+```python
+try:
+    result = link_wallet_address(
+        wallet_address="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+    )
+    print(result)
+except ValueError as e:
+    print(f"Invalid wallet address: {e}")
+except Exception as e:
+    print(f"Error linking wallet: {e}")
+```
+
+## Using with Coinbase CDP
+
+If you're using the Coinbase CDP AgentKit for wallet management:
+
+```python
+from coinbase_agentkit import AgentKit
+from hyperbolic_agentkit_core.actions import link_wallet_address
+
+# Get wallet address from CDP
+agent_kit = AgentKit(...)
+wallet_address = agent_kit.wallet_provider.get_default_address()
+
+# Link to Hyperbolic
+link_wallet_address(wallet_address=wallet_address)
+
+# Use CDP to send funds
+# agent_kit.transfer(...)
+```
+
+## Security Notes
+
+- Never share your private keys or API keys
+- Always verify the Hyperbolic deposit address before sending funds
+- Only send supported tokens (USDC, USDT, DAI) on Base network
+- Sending unsupported tokens or wrong network will result in loss of funds
+
+## Related Actions
+
+- [Get Current Balance](/api/hyperbolic/get-current-balance) - Check your credit balance
+- [Get Spend History](/api/hyperbolic/get-spend-history) - Monitor GPU rental costs
+- [Rent Compute](/api/hyperbolic/rent-compute) - Use credits to rent GPUs

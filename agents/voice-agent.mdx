@@ -1,0 +1,494 @@
+---
+title: 'Voice Agent'
+description: 'Build real-time voice AI agents with OpenAI Realtime API and WebSocket streaming'
+---
+
+## Overview
+
+The Voice Agent enables real-time voice conversations with AI characters using OpenAI's GPT-4o Realtime API. It supports bidirectional audio streaming over WebSockets with character personalities and tool integrations.
+
+## Architecture
+
+The voice agent uses:
+- **OpenAI Realtime API** (`gpt-4o-realtime-preview`) for voice processing
+- **WebSockets** for bidirectional audio streaming
+- **Starlette** as the web framework
+- **LangChain OpenAI Voice** wrapper for agent orchestration
+
+## Server Implementation
+
+The voice server is built with Starlette and provides WebSocket endpoints:
+
+```python server/src/server/app.py
+import uvicorn
+from starlette.applications import Starlette
+from starlette.routing import Route, WebSocketRoute
+from starlette.websockets import WebSocket
+from dotenv import load_dotenv
+
+from langchain_openai_voice import OpenAIVoiceReactAgent
+from server.utils import websocket_stream
+from server.tools import TOOLS
+from chatbot import loadCharacters, process_character_config
+from server.prompt import BASE_INSTRUCTIONS
+
+load_dotenv(override=True)
+
+# Track active connections
+active_connections = 0
+MAX_CONNECTIONS_PER_INSTANCE = 10
+
+async def websocket_endpoint(websocket: WebSocket, character_file: str):
+    global active_connections
+    
+    # Connection limiting
+    if active_connections >= MAX_CONNECTIONS_PER_INSTANCE:
+        await websocket.accept()
+        await websocket.send_text(
+            json.dumps({
+                "type": "error",
+                "message": "Server at capacity. Please try again later."
+            })
+        )
+        await websocket.close()
+        return
+    
+    active_connections += 1
+    try:
+        await websocket.accept()
+        browser_receive_stream = websocket_stream(websocket)
+        
+        # Load character configuration
+        character = loadCharacters(character_file)[0]
+        personality = process_character_config(character)
+        
+        # Combine base instructions with character config
+        full_instructions = BASE_INSTRUCTIONS.format(
+            character_instructions=personality,
+            character_name=character["name"],
+            adjectives=", ".join(character.get("adjectives", [])),
+            topics=", ".join(character.get("topics", [])),
+        )
+        
+        # Create voice agent
+        agent = OpenAIVoiceReactAgent(
+            model="gpt-4o-realtime-preview",
+            tools=TOOLS,
+            instructions=full_instructions,
+            voice="verse",  # Options: alloy, ash, ballad, coral, echo, sage, shimmer, verse
+        )
+        
+        # Connect agent to WebSocket streams
+        await agent.aconnect(browser_receive_stream, websocket.send_text)
+    finally:
+        active_connections -= 1
+```
+
+## Character-Specific Endpoints
+
+Create dedicated endpoints for different characters:
+
+```python server/src/server/app.py
+async def rolypoly_websocket_endpoint(websocket: WebSocket):
+    await websocket_endpoint(websocket, "characters/rolypoly.json")
+
+async def chainyoda_websocket_endpoint(websocket: WebSocket):
+    await websocket_endpoint(websocket, "characters/chainyoda.json")
+
+routes = [
+    Route("/", homepage),
+    Route("/health", health_check),
+    WebSocketRoute("/ws", websocket_endpoint),
+    WebSocketRoute("/ws/rolypoly", rolypoly_websocket_endpoint),
+    WebSocketRoute("/ws/chainyoda", chainyoda_websocket_endpoint),
+]
+
+app = Starlette(debug=True, routes=routes)
+app.mount("/", StaticFiles(directory="server/src/server/static"), name="static")
+```
+
+## Voice Instructions
+
+Character personalities are injected into the voice agent prompt:
+
+```python server/src/server/prompt.py
+BASE_INSTRUCTIONS = """
+You are {character_name}
+
+# Character Identity Configuration
+{character_instructions}
+
+# Operational Guidelines
+You are a helpful assistant with access to tools. Maintain these core principles:
+
+1. Personality Enforcement:
+- Speak in English
+- Be concise but insightful
+- Prioritize character bio/lore/knowledge over general knowledge
+
+2. Tool Usage Priorities:
+- When asked about GPUs: Only state model names from get_available_gpus
+- For podcast questions ("The Podcast", "The Rollup"): 
+  * Use podcast_query_tool first
+  * Cite speakers and exact quotes
+  * Cross-reference with character knowledge
+
+3. Interaction Style:
+- Maintain this tone: {adjectives}
+- Adhere strictly to style guidelines
+- Focus on these topics: {topics}
+"""
+```
+
+## Health Monitoring
+
+The server includes health checks for load balancing:
+
+```python server/src/server/app.py
+import psutil
+
+async def health_check(request):
+    # Get system metrics
+    memory = psutil.virtual_memory()
+    
+    # Check if we're in a healthy state
+    is_healthy = (
+        memory.percent < 90 and 
+        active_connections < MAX_CONNECTIONS_PER_INSTANCE
+    )
+    
+    # Return detailed health information
+    return JSONResponse(
+        {
+            "status": "healthy" if is_healthy else "unhealthy",
+            "memory": {
+                "used_percent": memory.percent,
+                "available_mb": memory.available / (1024 * 1024),
+            },
+            "connections": {
+                "active": active_connections,
+                "max": MAX_CONNECTIONS_PER_INSTANCE,
+            },
+        },
+        status_code=200 if is_healthy else 503,
+    )
+```
+
+## Voice Options
+
+OpenAI Realtime API supports multiple voices:
+
+<CardGroup cols={2}>
+  <Card title="alloy" icon="microphone">
+    Neutral, balanced tone
+  </Card>
+  <Card title="ash" icon="microphone">
+    Deep, calm voice
+  </Card>
+  <Card title="ballad" icon="microphone">
+    Warm, friendly tone
+  </Card>
+  <Card title="coral" icon="microphone">
+    Bright, energetic voice
+  </Card>
+  <Card title="echo" icon="microphone">
+    Clear, professional tone
+  </Card>
+  <Card title="sage" icon="microphone">
+    Wise, measured voice
+  </Card>
+  <Card title="shimmer" icon="microphone">
+    Soft, gentle tone
+  </Card>
+  <Card title="verse" icon="microphone">
+    Dynamic, expressive voice
+  </Card>
+</CardGroup>
+
+## Configuration
+
+Set up your voice agent server:
+
+```bash .env
+# OpenAI (Required for voice agent)
+OPENAI_API_KEY=your_openai_api_key
+
+# Character Configuration
+CHARACTER_FILE=characters/default.json
+
+# Server Configuration
+PORT=3000
+HOST=0.0.0.0
+
+# Tool Configuration (same as chat agent)
+USE_COINBASE_TOOLS=true
+USE_HYPERBOLIC_TOOLS=true
+USE_PODCAST_KNOWLEDGE_BASE=true
+```
+
+## Running the Server
+
+Start the voice agent server:
+
+```bash Terminal
+# Install dependencies
+pip install uvicorn starlette langchain-openai-voice psutil
+
+# Start the server
+python server/src/server/app.py
+```
+
+The server will start on `http://0.0.0.0:3000` with WebSocket endpoints ready.
+
+## Client Integration
+
+### WebSocket Connection
+
+Connect from a web browser:
+
+```javascript client.js
+const ws = new WebSocket('ws://localhost:3000/ws/chainyoda');
+
+ws.onopen = () => {
+  console.log('Connected to voice agent');
+  
+  // Start audio capture from microphone
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      const mediaRecorder = new MediaRecorder(stream);
+      
+      mediaRecorder.ondataavailable = (event) => {
+        // Send audio data to server
+        ws.send(event.data);
+      };
+      
+      mediaRecorder.start(100); // Send chunks every 100ms
+    });
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  
+  if (data.type === 'audio') {
+    // Play received audio from agent
+    playAudioChunk(data.audio);
+  } else if (data.type === 'transcript') {
+    console.log('Agent said:', data.text);
+  }
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+```
+
+### Audio Format
+
+The agent expects audio in PCM16 format at 24kHz sample rate:
+
+```javascript
+const audioContext = new AudioContext({ sampleRate: 24000 });
+const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+processor.onaudioprocess = (e) => {
+  const inputData = e.inputBuffer.getChannelData(0);
+  
+  // Convert Float32Array to Int16Array (PCM16)
+  const pcm16 = new Int16Array(inputData.length);
+  for (let i = 0; i < inputData.length; i++) {
+    const s = Math.max(-1, Math.min(1, inputData[i]));
+    pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  
+  ws.send(pcm16.buffer);
+};
+```
+
+## Tool Integration
+
+Voice agents can use the same tools as chat agents:
+
+```python server/tools.py
+from langchain.tools import Tool
+from langchain_community.tools import DuckDuckGoSearchRun
+
+TOOLS = [
+    DuckDuckGoSearchRun(name="web_search"),
+    Tool(
+        name="query_podcast_knowledge_base",
+        func=lambda q: podcast_kb.query_knowledge_base(q),
+        description="Query the podcast knowledge base for insights"
+    ),
+    # Add more tools as needed
+]
+```
+
+## Load Balancing
+
+The server limits concurrent connections to maintain performance:
+
+```python
+MAX_CONNECTIONS_PER_INSTANCE = 10
+
+if active_connections >= MAX_CONNECTIONS_PER_INSTANCE:
+    await websocket.send_text(json.dumps({
+        "type": "error",
+        "message": "Server at capacity. Please try again later."
+    }))
+    await websocket.close()
+    return
+```
+
+For production, deploy multiple instances behind a load balancer.
+
+## Deployment
+
+### Docker
+
+Create a Dockerfile for the voice server:
+
+```dockerfile Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY server/ ./server/
+COPY characters/ ./characters/
+COPY chatbot.py .
+
+EXPOSE 3000
+
+CMD ["python", "server/src/server/app.py"]
+```
+
+Build and run:
+
+```bash Terminal
+docker build -t voice-agent .
+docker run -p 3000:3000 --env-file .env voice-agent
+```
+
+### Cloud Deployment
+
+For production deployment with auto-scaling:
+
+<Steps>
+  <Step title="Containerize the application">
+    Build and push your Docker image to a container registry
+  </Step>
+  
+  <Step title="Deploy to cloud platform">
+    Use AWS ECS, Google Cloud Run, or Azure Container Instances
+  </Step>
+  
+  <Step title="Configure load balancer">
+    Set up health check endpoint at `/health`
+  </Step>
+  
+  <Step title="Enable auto-scaling">
+    Scale based on active connections and memory usage
+  </Step>
+</Steps>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Latency Optimization" icon="gauge">
+    - Use WebSocket compression
+    - Deploy close to users geographically
+    - Stream audio in small chunks (100ms)
+    - Minimize tool execution time
+  </Card>
+  
+  <Card title="Connection Management" icon="link">
+    - Implement reconnection logic
+    - Handle network interruptions gracefully
+    - Monitor active connections
+    - Set appropriate timeouts
+  </Card>
+  
+  <Card title="Audio Quality" icon="waveform">
+    - Use 24kHz sample rate minimum
+    - Implement noise reduction
+    - Handle audio buffering properly
+    - Test with various microphones
+  </Card>
+  
+  <Card title="Security" icon="shield">
+    - Use WSS (WebSocket Secure) in production
+    - Implement authentication
+    - Rate limit connections
+    - Validate audio data size
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection fails immediately">
+    - Verify `OPENAI_API_KEY` is set correctly
+    - Check WebSocket URL (ws:// for local, wss:// for production)
+    - Ensure firewall allows WebSocket connections
+    - Review browser console for CORS errors
+  </Accordion>
+  
+  <Accordion title="No audio output">
+    - Check browser microphone permissions
+    - Verify audio format is PCM16 at 24kHz
+    - Test audio playback independently
+    - Review WebSocket message format
+  </Accordion>
+  
+  <Accordion title="High latency">
+    - Reduce audio chunk size
+    - Check network bandwidth
+    - Monitor server CPU/memory usage
+    - Consider deploying closer to users
+  </Accordion>
+  
+  <Accordion title="Server capacity errors">
+    - Scale to more instances
+    - Increase `MAX_CONNECTIONS_PER_INSTANCE`
+    - Implement connection queuing
+    - Add load balancer
+  </Accordion>
+</AccordionGroup>
+
+## Example Use Cases
+
+<CardGroup cols={3}>
+  <Card title="Crypto Advisor" icon="bitcoin">
+    Voice agent that explains DeFi concepts and executes trades
+  </Card>
+  
+  <Card title="Podcast Assistant" icon="podcast">
+    Query podcast transcripts via voice and get audio summaries
+  </Card>
+  
+  <Card title="Customer Support" icon="headset">
+    Real-time voice support with blockchain transaction help
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Chat Agent" icon="message" href="/agents/chat-agent">
+    Build text-based conversational agents
+  </Card>
+  
+  <Card title="Twitter Automation" icon="robot" href="/agents/twitter-automation">
+    Create autonomous social media bots
+  </Card>
+  
+  <Card title="Custom Tools" icon="wrench" href="/concepts/tools">
+    Add custom capabilities to your voice agent
+  </Card>
+  
+  <Card title="Twitter Automation" icon="twitter" href="/agents/twitter-automation">
+    Set up autonomous social media agents
+  </Card>
+</CardGroup>

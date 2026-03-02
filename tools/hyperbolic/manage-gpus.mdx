@@ -1,0 +1,484 @@
+---
+title: Manage GPU Instances
+description: Check available GPUs, monitor instance status, and terminate compute resources
+---
+
+The Hyperbolic toolkit provides several tools for managing GPU instances throughout their lifecycle - from discovering available resources to monitoring active instances and cleaning up when done.
+
+## Available Management Tools
+
+<CardGroup cols={2}>
+  <Card title="Get Available GPUs" icon="list">
+    Browse all available GPU machines in the marketplace
+  </Card>
+  <Card title="Get GPU Status" icon="activity">
+    Monitor your currently rented instances
+  </Card>
+  <Card title="Terminate Compute" icon="power-off">
+    Stop and release rented instances
+  </Card>
+  <Card title="Spend History" icon="chart-line">
+    View detailed billing and usage analytics
+  </Card>
+</CardGroup>
+
+## Tool: get_available_gpus
+
+Lists all available GPU machines on the Hyperbolic platform with pricing and availability information.
+
+### Parameters
+
+No input parameters required.
+
+### Returns
+
+Returns a formatted string with available GPU options:
+
+```
+Available GPU Options:
+
+Cluster: us-east-1-cluster
+Node ID: node-abc123
+GPU Model: NVIDIA H100
+Available GPUs: 8/8
+Price: $5.00/hour per GPU
+----------------------------------------
+
+Cluster: us-west-2-cluster
+Node ID: node-def456
+GPU Model: NVIDIA A100
+Available GPUs: 4/8
+Price: $3.50/hour per GPU
+----------------------------------------
+```
+
+### Usage Example
+
+```python
+from hyperbolic_agentkit_core.actions import GetAvailableGpusAction
+
+# Get available GPUs
+get_gpus = GetAvailableGpusAction()
+available = get_gpus.func()
+
+print(available)
+```
+
+### With LangChain Agent
+
+```python
+from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import create_react_agent
+from hyperbolic_langchain.agent_toolkits import HyperbolicToolkit
+from hyperbolic_langchain.utils import HyperbolicAgentkitWrapper
+
+hyperbolic = HyperbolicAgentkitWrapper()
+toolkit = HyperbolicToolkit.from_hyperbolic_agentkit_wrapper(hyperbolic)
+tools = toolkit.get_tools()
+
+llm = ChatOpenAI(model="gpt-4")
+agent = create_react_agent(llm, tools)
+
+events = agent.stream(
+    {"messages": [("user", "What GPUs are available right now?")]},
+    stream_mode="values",
+)
+
+for event in events:
+    event["messages"][-1].pretty_print()
+```
+
+<Note>
+**Pricing Information**
+
+GPU prices are returned in cents per hour from the API but displayed as dollars per hour in the formatted output. The conversion is handled automatically.
+</Note>
+
+### Implementation Details
+
+Source: `hyperbolic_agentkit_core/actions/get_available_gpus.py:27-82`
+
+```python
+def get_available_gpus() -> str:
+    """Returns formatted string of available GPUs from the Hyperbolic API."""
+    
+    api_key = get_api_key()
+    
+    url = "https://api.hyperbolic.xyz/v1/marketplace"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    data = {"filters": {}}
+    
+    response = requests.post(url, headers=headers, json=data)
+    data = response.json()
+    
+    formatted_output = "Available GPU Options:\n\n"
+    
+    if "instances" in data:
+        for instance in data["instances"]:
+            # Skip reserved instances
+            if instance.get("reserved", True):
+                continue
+            
+            # Extract GPU details
+            gpus = instance.get("hardware", {}).get("gpus", [])
+            gpu_model = gpus[0].get("model", "Unknown Model") if gpus else "Unknown"
+            
+            # Convert price from cents to dollars
+            price_amount = instance.get("pricing", {}).get("price", {}).get("amount", 0) / 100
+            
+            # Calculate availability
+            gpus_total = instance.get("gpus_total", 0)
+            gpus_reserved = instance.get("gpus_reserved", 0)
+            gpus_available = gpus_total - gpus_reserved
+            
+            if gpus_available > 0:
+                formatted_output += f"Cluster: {instance['cluster_name']}\n"
+                formatted_output += f"Node ID: {instance['id']}\n"
+                formatted_output += f"GPU Model: {gpu_model}\n"
+                formatted_output += f"Available GPUs: {gpus_available}/{gpus_total}\n"
+                formatted_output += f"Price: ${price_amount:.2f}/hour per GPU\n"
+                formatted_output += "-" * 40 + "\n\n"
+    
+    return formatted_output
+```
+
+## Tool: get_gpu_status
+
+Returns the status and SSH commands for your currently rented GPU instances.
+
+### Parameters
+
+No input parameters required.
+
+### Returns
+
+Returns a JSON response with all your active instances:
+
+```json
+{
+  "instances": [
+    {
+      "instance_id": "respectful-rose-pelican",
+      "instance_name": "respectful-rose-pelican",
+      "status": "running",
+      "cluster_name": "us-east-1-cluster",
+      "node_name": "node-abc123",
+      "gpu_count": 2,
+      "gpu_model": "NVIDIA H100",
+      "ssh_command": "ssh ubuntu@12.34.56.78 -p 22",
+      "price": {
+        "amount": 500,
+        "currency": "USD"
+      },
+      "started_at": "2024-03-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+### Usage Example
+
+```python
+from hyperbolic_agentkit_core.actions import GetGpuStatusAction
+import json
+
+# Get status of all your instances
+get_status = GetGpuStatusAction()
+status = get_status.func()
+
+# Parse the JSON response
+if isinstance(status, str):
+    status_data = json.loads(status)
+else:
+    status_data = status
+
+for instance in status_data.get("instances", []):
+    print(f"Instance: {instance['instance_id']}")
+    print(f"Status: {instance['status']}")
+    print(f"SSH: {instance['ssh_command']}")
+    print()
+```
+
+### Instance Status Values
+
+<ResponseField name="starting" type="status">
+  Instance is being provisioned. Not ready for SSH access yet.
+  
+  **Action**: Wait 5-10 seconds and check status again.
+</ResponseField>
+
+<ResponseField name="running" type="status">
+  Instance is ready and accessible via SSH.
+  
+  **Action**: You can now connect using the SSH command provided.
+</ResponseField>
+
+<ResponseField name="terminated" type="status">
+  Instance has been shut down and is no longer accessible.
+  
+  **Action**: No action needed. Instance is fully stopped.
+</ResponseField>
+
+<Warning>
+If an instance shows status "starting", wait at least 5 seconds before checking again. Instances typically take 30-60 seconds to fully provision.
+</Warning>
+
+### Implementation Details
+
+Source: `hyperbolic_agentkit_core/actions/get_gpu_status.py:29-44`
+
+```python
+def get_gpu_status() -> str:
+    """Returns string representation of response from Hyperbolic API."""
+    
+    api_key = get_api_key()
+    
+    url = "https://api.hyperbolic.xyz/v1/marketplace/instances"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+    response = requests.get(url, headers=headers)
+    return response.json()
+```
+
+## Tool: terminate_compute
+
+Terminates a rented GPU instance and stops billing.
+
+### Parameters
+
+<ParamField path="instance_id" type="string" required>
+  The ID of the instance to terminate (e.g., "respectful-rose-pelican")
+</ParamField>
+
+### Returns
+
+Returns a JSON confirmation:
+
+```json
+{
+  "instance_id": "respectful-rose-pelican",
+  "status": "terminated",
+  "message": "Instance successfully terminated"
+}
+```
+
+### Usage Example
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    GetGpuStatusAction,
+    TerminateComputeAction
+)
+import json
+
+# Get current instances
+get_status = GetGpuStatusAction()
+status = get_status.func()
+status_data = json.loads(status) if isinstance(status, str) else status
+
+# Terminate the first instance
+if status_data.get("instances"):
+    instance_id = status_data["instances"][0]["instance_id"]
+    
+    terminate = TerminateComputeAction()
+    result = terminate.func(instance_id=instance_id)
+    
+    print(f"Terminated: {result}")
+```
+
+### With LangChain Agent
+
+```python
+events = agent.stream(
+    {"messages": [("user", "Terminate all my running instances")]},
+    stream_mode="values",
+)
+
+for event in events:
+    event["messages"][-1].pretty_print()
+```
+
+<Warning>
+**Termination is Immediate**
+
+Once you terminate an instance:
+- SSH access is immediately revoked
+- All data on the instance is lost
+- Billing stops immediately
+- The action cannot be undone
+
+Make sure to save any important data before terminating.
+</Warning>
+
+### Implementation Details
+
+Source: `hyperbolic_agentkit_core/actions/terminate_compute.py:29-80`
+
+```python
+def terminate_compute(instance_id: str) -> str:
+    """Terminates a marketplace instance using the Hyperbolic API."""
+    
+    if not instance_id:
+        raise ValueError("instance_id is required")
+    
+    api_key = get_api_key()
+    
+    endpoint = "https://api.hyperbolic.xyz/v1/marketplace/instances/terminate"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    payload = {"id": instance_id}
+    
+    response = requests.post(endpoint, headers=headers, json=payload)
+    response.raise_for_status()
+    
+    return json.dumps(response.json(), indent=2)
+```
+
+## Tool: get_spend_history
+
+Retrieves and analyzes your GPU rental spending history.
+
+### Parameters
+
+No input parameters required.
+
+### Returns
+
+Returns formatted analysis of spending:
+
+```
+=== GPU Rental Spending Analysis ===
+
+Instance Rentals:
+- respectful-rose-pelican:
+  GPU: NVIDIA H100 (Count: 2)
+  Duration: 3600 seconds
+  Cost: $10.00
+- brave-blue-dolphin:
+  GPU: NVIDIA A100 (Count: 4)
+  Duration: 7200 seconds
+  Cost: $28.00
+
+GPU Type Statistics:
+
+NVIDIA H100:
+  Total Rentals: 2
+  Total Time: 3600 seconds
+  Total Cost: $10.00
+
+NVIDIA A100:
+  Total Rentals: 4
+  Total Time: 7200 seconds
+  Total Cost: $28.00
+
+Total Spending: $38.00
+```
+
+### Usage Example
+
+```python
+from hyperbolic_agentkit_core.actions import GetSpendHistoryAction
+
+get_history = GetSpendHistoryAction()
+history = get_history.func()
+
+print(history)
+```
+
+## Tool: get_current_balance
+
+Retrieves your current Hyperbolic platform credit balance.
+
+### Parameters
+
+No input parameters required.
+
+### Returns
+
+```
+Your current Hyperbolic platform balance is $125.50.
+
+Purchase History:
+- $100.00 on March 01, 2024
+- $50.00 on February 15, 2024
+```
+
+### Usage Example
+
+```python
+from hyperbolic_agentkit_core.actions import GetCurrentBalanceAction
+
+get_balance = GetCurrentBalanceAction()
+balance = get_balance.func()
+
+print(balance)
+```
+
+<Note>
+This shows your Hyperbolic platform credits (in USD), not cryptocurrency wallet balances. These credits are used to pay for GPU rentals.
+</Note>
+
+## Complete Management Example
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    GetAvailableGpusAction,
+    GetGpuStatusAction,
+    GetCurrentBalanceAction,
+    GetSpendHistoryAction,
+    TerminateComputeAction
+)
+import json
+
+# Check balance
+balance_action = GetCurrentBalanceAction()
+print(balance_action.func())
+print()
+
+# Check available GPUs
+available_action = GetAvailableGpusAction()
+print(available_action.func())
+print()
+
+# Check current instances
+status_action = GetGpuStatusAction()
+status = status_action.func()
+status_data = json.loads(status) if isinstance(status, str) else status
+
+print(f"You have {len(status_data.get('instances', []))} active instances")
+for instance in status_data.get("instances", []):
+    print(f"  - {instance['instance_id']}: {instance['status']}")
+print()
+
+# Check spending
+history_action = GetSpendHistoryAction()
+print(history_action.func())
+print()
+
+# Terminate all instances
+if status_data.get("instances"):
+    terminate_action = TerminateComputeAction()
+    for instance in status_data["instances"]:
+        if instance["status"] != "terminated":
+            result = terminate_action.func(instance_id=instance["instance_id"])
+            print(f"Terminated {instance['instance_id']}")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Rent Compute" icon="server" href="/tools/hyperbolic/rent-compute">
+    Learn how to rent GPU instances
+  </Card>
+  <Card title="SSH Access" icon="terminal" href="/tools/hyperbolic/ssh-access">
+    Connect to your instances via SSH
+  </Card>
+</CardGroup>

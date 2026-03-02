@@ -1,0 +1,558 @@
+---
+title: Installation
+description: Complete setup guide for all Hyperbolic AgentKit features
+---
+
+## System Requirements
+
+<CardGroup cols={2}>
+  <Card title="Operating System" icon="desktop">
+    macOS or Linux (Windows not tested)
+  </Card>
+  <Card title="Python" icon="python">
+    Python 3.12 (required)
+  </Card>
+  <Card title="Node.js" icon="node">
+    Node.js 18+ (for web interface)
+  </Card>
+  <Card title="Git" icon="git">
+    Git for version control
+  </Card>
+</CardGroup>
+
+## Installation Methods
+
+<Tabs>
+  <Tab title="Poetry (Recommended)">
+    Poetry provides the best dependency management and isolation:
+
+    <Steps>
+      <Step title="Install Poetry">
+        ```bash
+        curl -sSL https://install.python-poetry.org | python3 -
+        ```
+        
+        Add Poetry to your PATH (if not already):
+        ```bash
+        export PATH="$HOME/.local/bin:$PATH"
+        ```
+      </Step>
+
+      <Step title="Clone Repository">
+        ```bash
+        git clone https://github.com/yourusername/Hyperbolic-AgentKit.git
+        cd Hyperbolic-AgentKit
+        ```
+      </Step>
+
+      <Step title="Setup Environment">
+        ```bash
+        # Use Python 3.12
+        poetry env use python3.12
+        
+        # Install all dependencies
+        poetry install
+        
+        # Install Playwright browsers
+        poetry run playwright install
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="pip (Alternative)">
+    <Warning>
+      Using pip requires manual dependency management. Poetry is recommended.
+    </Warning>
+
+    ```bash
+    # Create virtual environment
+    python3.12 -m venv venv
+    source venv/bin/activate
+
+    # Install dependencies
+    pip install -r requirements.txt
+
+    # Install Playwright
+    playwright install
+    ```
+  </Tab>
+</Tabs>
+
+## Core Dependencies
+
+The framework includes these major packages:
+
+```toml pyproject.toml
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+coinbase-agentkit = "0.1.6"
+coinbase-agentkit-langchain = "^0.1.0"
+langchain-openai = "0.3.1"
+langgraph = "^0.2.73"
+langchain-anthropic = "^0.3.0"
+langchain-community = "^0.3.11"
+paramiko = "^3.4.0"  # SSH access
+tweepy = "^4.15.0"   # Twitter API
+browser-use = "^0.1.37"  # Browser automation
+anthropic = ">=0.41.0,<1.0.0"  # Writing agent
+pypdf = "^4.0.1"     # PDF processing
+```
+
+## API Keys Configuration
+
+### Required API Keys
+
+<Steps>
+  <Step title="Create Environment File">
+    ```bash
+    cp .env.example .env
+    ```
+  </Step>
+
+  <Step title="Configure Core Keys">
+    Add these required keys to `.env`:
+
+    ```bash .env
+    # Anthropic - For Claude LLM
+    ANTHROPIC_API_KEY=sk-ant-api03-xxx
+    
+    # CDP - For blockchain operations
+    CDP_API_KEY_NAME=organizations/{org_id}/apiKeys/{key_id}
+    CDP_API_KEY_PRIVATE=-----BEGIN EC PRIVATE KEY-----\nxxx\n-----END EC PRIVATE KEY-----
+    CDP_NETWORK_ID=base-mainnet
+    
+    # Hyperbolic - For GPU compute
+    HYPERBOLIC_API_KEY=your_hyperbolic_api_key
+    ```
+
+    <Accordion title="How to get CDP API keys">
+      1. Sign up at [CDP Portal](https://portal.cdp.coinbase.com/access/api)
+      2. Create a new API key
+      3. Download the JSON file with your credentials
+      4. The `name` field is your `CDP_API_KEY_NAME`
+      5. The `privateKey` field is your `CDP_API_KEY_PRIVATE`
+      6. Keep the newlines in the private key (use `\n` in .env file)
+    </Accordion>
+  </Step>
+
+  <Step title="Enable Core Toolkits">
+    ```bash .env
+    # Core toolkits
+    USE_COINBASE_TOOLS=true
+    USE_HYPERBOLIC_TOOLS=true
+    USE_BROWSER_TOOLS=true
+    ```
+  </Step>
+</Steps>
+
+### Optional API Keys
+
+<Tabs>
+  <Tab title="Twitter/X">
+    Required for social media features:
+
+    ```bash .env
+    # Twitter API v2 credentials
+    TWITTER_ACCESS_TOKEN=your_access_token
+    TWITTER_API_KEY=your_api_key
+    TWITTER_API_SECRET=your_api_secret
+    TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret
+    TWITTER_BEARER_TOKEN=your_bearer_token
+    TWITTER_CLIENT_ID=your_client_id
+    TWITTER_CLIENT_SECRET=your_client_secret
+    
+    # Enable Twitter tools
+    USE_TWITTER_CORE=true
+    USE_TWITTER_KNOWLEDGE_BASE=true
+    USE_TWEET_REPLY_TRACKING=true
+    USE_TWEET_REPOST_TRACKING=true
+    ```
+
+    <Card title="Get Twitter API Access" icon="link" href="https://developer.twitter.com">
+      Create a developer account and app at Twitter Developer Portal
+    </Card>
+  </Tab>
+
+  <Tab title="Writing Agent">
+    Required for content generation:
+
+    ```bash .env
+    # Tavily for web research
+    TAVILY_API_KEY=tvly-xxx
+    
+    # Enable writing agent
+    USE_WRITING_AGENT=true
+    USE_WEB_SEARCH=true
+    ```
+
+    The writing agent uses Anthropic API (already configured) and Tavily for web search.
+
+    <Note>
+      Get Tavily API key at [tavily.com](https://tavily.com)
+    </Note>
+  </Tab>
+
+  <Tab title="Voice Agent">
+    Required for WebSocket voice interface:
+
+    ```bash .env
+    # OpenAI for voice capabilities
+    OPENAI_API_KEY=sk-xxx
+    ```
+
+    <Warning>
+      Voice agent only works with GPT-4o Realtime models:
+      - `gpt-4o-realtime-preview`
+      - `gpt-4o-mini-realtime-preview`
+    </Warning>
+  </Tab>
+
+  <Tab title="Podcast Agent">
+    Required for video/podcast processing:
+
+    ```bash .env
+    # Google Cloud for Gemini
+    # Place service account key as eaccservicekey.json in project root
+    USE_PODCAST_KNOWLEDGE_BASE=true
+    ```
+
+    1. Create a Google Cloud service account
+    2. Download the key as `eaccservicekey.json`
+    3. Place it in the project root directory
+  </Tab>
+
+  <Tab title="GitHub Integration">
+    ```bash .env
+    GITHUB_TOKEN=ghp_xxx
+    USE_GITHUB_TOOLS=true
+    ```
+  </Tab>
+</Tabs>
+
+## SSH Configuration
+
+<Note>
+  SSH access is required for connecting to rented GPU instances.
+</Note>
+
+<Steps>
+  <Step title="Generate RSA Key">
+    Only RSA keys are supported (not Ed25519):
+
+    ```bash
+    ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+    ```
+
+    Save to default location: `~/.ssh/id_rsa`
+  </Step>
+
+  <Step title="Configure in .env">
+    ```bash .env
+    SSH_PRIVATE_KEY_PATH=~/.ssh/id_rsa
+    ```
+  </Step>
+
+  <Step title="Add Public Key to Hyperbolic">
+    1. Go to [app.hyperbolic.xyz](https://app.hyperbolic.xyz)
+    2. Navigate to Settings
+    3. Add your public key (`~/.ssh/id_rsa.pub`)
+  </Step>
+</Steps>
+
+## Crypto Setup for GPU Compute
+
+To pay for GPU compute with cryptocurrency:
+
+<Steps>
+  <Step title="Prepare Wallet">
+    You need an Ethereum wallet with funds on the **Base network**.
+
+    Supported tokens:
+    - USDC
+    - USDT
+    - DAI
+  </Step>
+
+  <Step title="Connect Wallet">
+    Use the agent to link your wallet:
+
+    ```bash
+    User: connect my wallet 0xYOUR_WALLET_ADDRESS to Hyperbolic
+    ```
+
+    The agent will use the `link_wallet_address` action:
+
+    ```python
+    # From hyperbolic_agentkit_core/actions/link_wallet_address.py
+    def link_wallet_address(wallet_address: str) -> str:
+        api_key = get_api_key()
+        endpoint = "https://api.hyperbolic.xyz/v1/billing/wallet"
+        payload = {"wallet_address": wallet_address}
+        response = requests.post(endpoint, headers=headers, json=payload)
+        return response.json()
+    ```
+  </Step>
+
+  <Step title="Send Funds">
+    Transfer funds to Hyperbolic's Base address:
+
+    ```
+    To: 0xd3cB24E0Ba20865C530831C85Bd6EbC25f6f3B60
+    Network: Base
+    Token: USDC, USDT, or DAI
+    ```
+
+    Funds are available immediately after confirmation.
+  </Step>
+
+  <Step title="Start Computing">
+    You can now rent GPUs:
+
+    ```bash
+    User: Rent an H100 GPU
+    ```
+  </Step>
+</Steps>
+
+## Character Configuration
+
+Customize your agent's personality:
+
+<Steps>
+  <Step title="Copy Template">
+    ```bash
+    cp characters/default.json characters/my-agent.json
+    ```
+  </Step>
+
+  <Step title="Edit Configuration">
+    ```json characters/my-agent.json
+    {
+      "name": "MyAgent",
+      "bio": [
+        "AI assistant specialized in GPU compute",
+        "Expert in blockchain and DeFi"
+      ],
+      "lore": [
+        "Built to help developers access compute resources"
+      ],
+      "adjectives": [
+        "helpful",
+        "technical",
+        "efficient"
+      ],
+      "style": {
+        "all": [
+          "Be concise and technical",
+          "Use clear examples"
+        ]
+      },
+      "topics": [
+        "AI/ML infrastructure",
+        "GPU computing",
+        "Blockchain"
+      ]
+    }
+    ```
+  </Step>
+
+  <Step title="Use Custom Character">
+    ```bash .env
+    CHARACTER_FILE=characters/my-agent.json
+    ```
+  </Step>
+</Steps>
+
+## Tool Configuration
+
+Enable or disable specific tools:
+
+```bash .env
+# Core Toolkits
+USE_COINBASE_TOOLS=true
+USE_HYPERBOLIC_TOOLS=true
+USE_BROWSER_TOOLS=true
+
+# Twitter Tools
+USE_TWITTER_CORE=true
+USE_TWEET_REPLY_TRACKING=true
+USE_TWEET_REPOST_TRACKING=true
+USE_TWEET_DELETE=true
+USE_USER_ID_LOOKUP=true
+USE_USER_TWEETS_LOOKUP=true
+USE_RETWEET=true
+
+# Additional Tools
+USE_WRITING_AGENT=true
+USE_WEB_SEARCH=true
+USE_REQUEST_TOOLS=true
+USE_GITHUB_TOOLS=true
+
+# Knowledge Bases
+USE_TWITTER_KNOWLEDGE_BASE=false
+USE_PODCAST_KNOWLEDGE_BASE=true
+
+# Security
+ALLOW_DANGEROUS_REQUEST=true  # Required for RequestsToolkit
+```
+
+## Running the Application
+
+<Tabs>
+  <Tab title="Terminal Chat">
+    Interactive command-line interface:
+
+    ```bash
+    poetry run python chatbot.py
+    ```
+
+    Choose mode:
+    - `1` - Interactive chat mode
+    - `2` - Character Twitter automation
+  </Tab>
+
+  <Tab title="Gradio Web UI">
+    Graphical web interface:
+
+    ```bash
+    poetry run python gradio_ui.py
+    ```
+
+    Access at `http://localhost:7860`
+  </Tab>
+
+  <Tab title="Voice Agent">
+    WebSocket-powered voice interface:
+
+    ```bash
+    PYTHONPATH=$PWD/server/src poetry run python server/src/server/app.py
+    ```
+
+    Access at `http://localhost:3000`
+
+    Available voices:
+    - alloy
+    - ash
+    - ballad
+    - coral
+    - echo
+    - sage
+    - shimmer
+    - verse
+  </Tab>
+</Tabs>
+
+## Verification
+
+Test your installation:
+
+<CodeGroup>
+
+```python Test Hyperbolic Tools
+from hyperbolic_langchain import HyperbolicToolkit, HyperbolicAgentkitWrapper
+
+hyperbolic = HyperbolicAgentkitWrapper()
+toolkit = HyperbolicToolkit.from_hyperbolic_agentkit_wrapper(hyperbolic)
+tools = toolkit.get_tools()
+
+print(f"Loaded {len(tools)} Hyperbolic tools:")
+for tool in tools:
+    print(f"  - {tool.name}")
+```
+
+```python Test CDP Tools
+from coinbase_agentkit import AgentKit, AgentKitConfig, CdpWalletProvider, CdpWalletProviderConfig
+
+wallet_provider = CdpWalletProvider(CdpWalletProviderConfig(
+    api_key_name=os.getenv("CDP_API_KEY_NAME"),
+    api_key_private=os.getenv("CDP_API_KEY_PRIVATE"),
+    network_id="base-mainnet"
+))
+
+agent_kit = AgentKit(AgentKitConfig(wallet_provider=wallet_provider))
+print("CDP AgentKit initialized successfully")
+```
+
+```python Test Twitter Client
+from twitter_agent.custom_twitter_actions import TwitterClient
+
+client = TwitterClient()
+user_id = await client.get_user_id("elonmusk")
+print(f"User ID: {user_id}")
+```
+
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Dependencies Install Failed">
+    Clean Poetry cache and reinstall:
+
+    ```bash
+    poetry env remove python3.12
+    poetry env use python3.12
+    poetry install --no-cache
+    ```
+  </Accordion>
+
+  <Accordion title="Browser Automation Issues">
+    Reinstall Playwright with system dependencies:
+
+    ```bash
+    poetry run playwright install --force
+    poetry run playwright install-deps
+    ```
+  </Accordion>
+
+  <Accordion title="Chrome Profile Issues">
+    For browser automation:
+    
+    1. Ensure Google Chrome is installed
+    2. Remove all pinned tabs from default profile
+    3. Disable profile selector on startup
+    4. Set Chrome as default browser
+  </Accordion>
+
+  <Accordion title="SSH Connection Failed">
+    Verify SSH key configuration:
+
+    ```bash
+    # Test key exists
+    ls -la ~/.ssh/id_rsa
+    
+    # Check key type (should be RSA)
+    head -1 ~/.ssh/id_rsa
+    # Should show: -----BEGIN RSA PRIVATE KEY-----
+    
+    # Ensure public key is in Hyperbolic settings
+    cat ~/.ssh/id_rsa.pub
+    ```
+  </Accordion>
+
+  <Accordion title="API Rate Limits">
+    If you hit rate limits:
+    
+    - Twitter: Client has `wait_on_rate_limit=True` built-in
+    - Anthropic: Use `ANTHROPIC_MAX_RETRIES` env var
+    - Hyperbolic: Contact support for limit increases
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build Your First Agent" icon="rocket" href="/quickstart">
+    Follow the quickstart guide
+  </Card>
+  <Card title="Explore Tools" icon="wrench" href="/tools/hyperbolic/overview">
+    Learn about available tools and capabilities
+  </Card>
+  <Card title="Customize Behavior" icon="sliders" href="/concepts/character-configuration">
+    Configure agent personality and style
+  </Card>
+  <Card title="Agent Types" icon="robot" href="/agents/chat-agent">
+    Explore different agent interfaces
+  </Card>
+</CardGroup>

@@ -1,0 +1,381 @@
+---
+title: "Environment Setup"
+description: "Configure your development environment for Hyperbolic AgentKit with API keys, dependencies, and system requirements"
+---
+
+## Prerequisites
+
+Before setting up Hyperbolic AgentKit, ensure your system meets the following requirements:
+
+### System Requirements
+
+- **Operating System**: macOS or Linux (Windows untested)
+- **Python**: 3.12 (required)
+- **Node.js**: 18+ (for web interface)
+- **Git**: Latest version
+
+### Required Tools
+
+<Steps>
+  <Step title="Install Python 3.12">
+    Hyperbolic AgentKit requires Python 3.12 specifically.
+
+    <CodeGroup>
+    ```bash macOS
+    brew install python@3.12
+    ```
+
+    ```bash Ubuntu/Debian
+    sudo add-apt-repository ppa:deadsnakes/ppa
+    sudo apt update
+    sudo apt install python3.12
+    ```
+    </CodeGroup>
+
+    Verify installation:
+    ```bash
+    python3.12 --version
+    ```
+  </Step>
+
+  <Step title="Install Poetry">
+    Poetry is the recommended dependency manager for this project.
+
+    ```bash
+    curl -sSL https://install.python-poetry.org | python3 -
+    ```
+
+    Add Poetry to your PATH (if needed):
+    ```bash
+    export PATH="$HOME/.local/bin:$PATH"
+    ```
+  </Step>
+
+  <Step title="Clone the Repository">
+    ```bash
+    git clone https://github.com/yourusername/Hyperbolic-AgentKit.git
+    cd Hyperbolic-AgentKit
+    ```
+  </Step>
+</Steps>
+
+## Install Dependencies
+
+<Steps>
+  <Step title="Set up Python Environment">
+    Configure Poetry to use Python 3.12 and install dependencies:
+
+    ```bash
+    poetry env use python3.12
+    poetry install
+    ```
+  </Step>
+
+  <Step title="Install Playwright Browsers">
+    If you plan to use browser automation tools:
+
+    ```bash
+    poetry run playwright install
+    ```
+
+    <Note>
+      Browser tools are recommended for maximum agent functionality. Ensure Google Chrome is installed on your system.
+    </Note>
+  </Step>
+</Steps>
+
+## API Keys Configuration
+
+Hyperbolic AgentKit integrates with multiple services. Configure the API keys for the features you want to use.
+
+<Steps>
+  <Step title="Create Environment File">
+    Copy the example environment file:
+
+    ```bash
+    cp .env.example .env
+    ```
+  </Step>
+
+  <Step title="Configure Core API Keys">
+    These are required for basic functionality:
+
+    ```bash .env
+    # Anthropic (Required)
+    ANTHROPIC_API_KEY=your_anthropic_api_key
+
+    # OpenAI (Required for voice agent)
+    OPENAI_API_KEY=your_openai_api_key
+
+    # CDP (Required for blockchain operations)
+    CDP_API_KEY_NAME=your_cdp_api_key_name
+    CDP_API_KEY_PRIVATE=your_cdp_api_key_private_key
+
+    # Hyperbolic (Required for GPU compute)
+    HYPERBOLIC_API_KEY=your_hyperbolic_api_key
+    ```
+
+    <CardGroup cols={2}>
+      <Card title="Anthropic API" icon="brain" href="https://console.anthropic.com/dashboard">
+        Get your API key for Claude models
+      </Card>
+      <Card title="OpenAI API" icon="openai" href="https://platform.openai.com/api-keys">
+        Required for voice agent functionality
+      </Card>
+      <Card title="CDP Portal" icon="wallet" href="https://portal.cdp.coinbase.com/access/api">
+        Blockchain and wallet operations
+      </Card>
+      <Card title="Hyperbolic" icon="microchip" href="https://app.hyperbolic.xyz">
+        GPU compute resources
+      </Card>
+    </CardGroup>
+  </Step>
+
+  <Step title="Configure Optional Integrations">
+    Add credentials for additional features:
+
+    ```bash .env
+    # Twitter/X Integration (Optional)
+    TWITTER_ACCESS_TOKEN=your_twitter_access_token
+    TWITTER_API_KEY=your_twitter_api_key
+    TWITTER_API_SECRET=your_twitter_api_secret
+    TWITTER_ACCESS_TOKEN_SECRET=your_twitter_access_token_secret
+    TWITTER_BEARER_TOKEN=your_twitter_bearer_token
+    TWITTER_CLIENT_ID=your_twitter_client_id
+    TWITTER_CLIENT_SECRET=your_twitter_client_secret
+
+    # Web Search (Required for Writing Agent)
+    TAVILY_API_KEY=your_tavily_api_key
+
+    # LangChain Tracing (Optional)
+    LANGCHAIN_TRACING_V2=true
+    LANGCHAIN_ENDPOINT=your_langchain_endpoint
+    LANGCHAIN_API_KEY=your_langchain_api_key
+    LANGCHAIN_PROJECT=your_langchain_project
+    ```
+
+    <Note>
+      For Twitter integration, you need a developer account at [Twitter Developer Portal](https://developer.twitter.com)
+    </Note>
+  </Step>
+</Steps>
+
+## Feature Toggles
+
+Configure which tools and capabilities your agent should have:
+
+```bash .env
+# Character Configuration
+CHARACTER_FILE=characters/default.json
+
+# Knowledge Base Configuration (at least one must be true)
+USE_TWITTER_KNOWLEDGE_BASE=false
+USE_PODCAST_KNOWLEDGE_BASE=true
+
+# Security Settings
+ALLOW_DANGEROUS_REQUEST=true  # Must be true to use request tools
+
+# Core Toolkits
+USE_COINBASE_TOOLS=true
+USE_HYPERBOLIC_TOOLS=true
+USE_TWITTER_CORE=true
+USE_BROWSER_TOOLS=true
+
+# Twitter Tools
+USE_TWEET_REPLY_TRACKING=true
+USE_TWEET_REPOST_TRACKING=true
+USE_TWEET_DELETE=true
+USE_USER_ID_LOOKUP=true
+USE_USER_TWEETS_LOOKUP=true
+USE_RETWEET=true
+
+# Additional Tools
+USE_DEPLOY_MULTITOKEN=true
+USE_WEB_SEARCH=true
+USE_REQUEST_TOOLS=true
+USE_WRITING_AGENT=true
+```
+
+## SSH Configuration for GPU Compute
+
+To use Hyperbolic's GPU compute features, you need an RSA SSH key:
+
+<Steps>
+  <Step title="Generate RSA Key">
+    <Warning>
+      Only RSA keys are supported. ED25519 keys will not work.
+    </Warning>
+
+    ```bash
+    ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+    ```
+
+    Save the key to the default location (`~/.ssh/id_rsa`) or specify a custom path.
+  </Step>
+
+  <Step title="Configure SSH Key Path">
+    If using a non-default location, update your `.env` file:
+
+    ```bash .env
+    SSH_PRIVATE_KEY_PATH=~/.ssh/id_rsa
+    ```
+  </Step>
+
+  <Step title="Upload Public Key to Hyperbolic">
+    1. Log in to [Hyperbolic Portal](https://app.hyperbolic.xyz)
+    2. Navigate to Settings
+    3. Add your public key (`~/.ssh/id_rsa.pub`)
+  </Step>
+</Steps>
+
+## Crypto Setup for GPU Compute
+
+To pay for GPU compute using cryptocurrency:
+
+<Steps>
+  <Step title="Prepare Ethereum Wallet">
+    You need an Ethereum wallet with funds on the Base network.
+  </Step>
+
+  <Step title="Connect Wallet to Hyperbolic">
+    Use the agent to connect your wallet:
+
+    ```
+    Prompt: "connect my wallet 0xYOUR_WALLET_ADDRESS to Hyperbolic"
+    ```
+  </Step>
+
+  <Step title="Send Funds">
+    Send supported tokens (USDC, USDT, or DAI) on Base network to:
+
+    ```
+    0xd3cB24E0Ba20865C530831C85Bd6EbC25f6f3B60
+    ```
+
+    Funds are available immediately for GPU rental.
+  </Step>
+</Steps>
+
+## Character Configuration
+
+Customize your AI agent's personality by editing character files:
+
+<Steps>
+  <Step title="Create Character File">
+    Duplicate the template:
+
+    ```bash
+    cp characters/template.json characters/my-character.json
+    ```
+  </Step>
+
+  <Step title="Edit Character Properties">
+    Edit `characters/my-character.json` to define:
+
+    - **name**: Agent's name
+    - **accountid**: Twitter account ID (if using Twitter features)
+    - **bio**: Background and description (array of strings)
+    - **lore**: Beliefs and worldview (array of strings)
+    - **knowledge**: Areas of expertise (array of strings)
+    - **adjectives**: Personality traits
+    - **postExamples**: Example posts for style learning
+    - **kol_list**: Key opinion leaders to interact with
+
+    Example structure from `chatbot.py:182-215`:
+    ```json
+    {
+      "name": "YourAgent",
+      "accountid": "123456789",
+      "bio": [
+        "AI agent specializing in blockchain",
+        "Expert in DeFi and smart contracts"
+      ],
+      "adjectives": ["friendly", "knowledgeable", "helpful"]
+    }
+    ```
+  </Step>
+
+  <Step title="Update Environment Variable">
+    Point to your character file:
+
+    ```bash .env
+    CHARACTER_FILE=characters/my-character.json
+    ```
+  </Step>
+</Steps>
+
+## Verify Installation
+
+Test that everything is configured correctly:
+
+```bash
+poetry run python chatbot.py
+```
+
+You should see:
+- Character configuration loading successfully
+- Knowledge base initialization prompts
+- Agent tools being registered
+- Mode selection menu
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Python Version Issues">
+    Ensure you're using Python 3.12:
+
+    ```bash
+    # Check Python version
+    python --version
+
+    # Force Poetry to use correct version
+    poetry env remove python3.12
+    poetry env use python3.12
+    poetry install --no-cache
+    ```
+  </Accordion>
+
+  <Accordion title="API Key Errors">
+    - Verify all API keys are correctly set in `.env`
+    - Check API key permissions and quotas
+    - Ensure no extra spaces or quotes around keys
+  </Accordion>
+
+  <Accordion title="Browser Automation Issues">
+    ```bash
+    # Reinstall Playwright browsers
+    poetry run playwright install --force
+    ```
+
+    For Chrome-specific issues:
+    - Ensure Google Chrome is installed
+    - Configure a default Chrome profile
+    - Remove all pinned tabs from the active profile
+  </Accordion>
+
+  <Accordion title="Dependencies Issues">
+    ```bash
+    # Clean Poetry environment
+    poetry env remove python3.12
+    poetry env use python3.12
+    poetry install --no-cache
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Running Agents" icon="play" href="/guides/running-agents">
+    Learn how to run agents in different modes
+  </Card>
+  <Card title="Creating Custom Tools" icon="wrench" href="/guides/creating-custom-tools">
+    Build your own agent capabilities
+  </Card>
+  <Card title="Knowledge Bases" icon="database" href="/guides/working-with-knowledge-bases">
+    Set up Twitter and Podcast knowledge bases
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/hyperbolic/rent-compute">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>

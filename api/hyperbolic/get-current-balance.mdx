@@ -1,0 +1,168 @@
+---
+title: "Get Current Balance"
+description: "Retrieve your current Hyperbolic platform credit balance"
+---
+
+## Overview
+
+The `get_current_balance` action retrieves your current Hyperbolic platform credit balance and recent purchase history. This shows your available credits for renting GPU compute resources.
+
+## Function Signature
+
+```python
+def get_current_balance() -> str
+```
+
+## Input Schema
+
+This action takes no input parameters.
+
+## Response
+
+Returns a formatted string with your current balance and purchase history.
+
+<ResponseField name="balance_info" type="string">
+  A formatted string containing:
+  - Current Hyperbolic platform balance in USD
+  - Recent credit purchase history with dates and amounts
+</ResponseField>
+
+## API Endpoints
+
+```
+GET https://api.hyperbolic.xyz/billing/get_current_balance
+GET https://api.hyperbolic.xyz/billing/purchase_history
+```
+
+## Example Response
+
+```
+Your current Hyperbolic platform balance is $125.50.
+
+Purchase History:
+- $100.00 on January 15, 2024
+- $50.00 on December 20, 2023
+```
+
+If no purchases have been made:
+
+```
+Your current Hyperbolic platform balance is $0.00.
+
+No previous purchases found.
+```
+
+## Example Usage
+
+```python
+from hyperbolic_agentkit_core.actions import get_current_balance
+
+# Get current balance and purchase history
+balance = get_current_balance()
+print(balance)
+```
+
+## Important Notes
+
+- This retrieves **Hyperbolic platform credits** (in USD), not cryptocurrency wallet balances
+- For crypto wallet balances (ETH/USDC), use Coinbase CDP wallet commands
+- Requires `HYPERBOLIC_API_KEY` environment variable
+- Balance is displayed in USD (converted from internal credit units)
+- Purchase history is sorted by date
+- These credits are used to pay for GPU compute rentals
+
+## Balance vs. Crypto Wallet
+
+### Platform Credits (This Action)
+
+- Hyperbolic's internal credit system
+- Denominated in USD
+- Used directly to rent GPU compute
+- Retrieved with `get_current_balance()`
+
+### Crypto Wallet (Different Action)
+
+- Blockchain wallet balances (ETH, USDC, etc.)
+- On Base network
+- Used to purchase platform credits
+- Retrieved with CDP wallet tools
+
+## Adding Credits
+
+To add credits to your Hyperbolic account using cryptocurrency:
+
+1. **Link your wallet** using the `link_wallet_address` action
+2. **Send funds** (USDC, USDT, or DAI on Base network) to:
+   ```
+   0xd3cB24E0Ba20865C530831C85Bd6EbC25f6f3B60
+   ```
+3. **Credits are available immediately** after the transaction confirms
+
+## Example Workflow
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    get_current_balance,
+    link_wallet_address,
+    get_spend_history
+)
+
+# 1. Check current balance
+balance = get_current_balance()
+print(balance)
+
+# 2. If balance is low, link wallet and add funds
+if "$0.00" in balance:
+    link_result = link_wallet_address(
+        wallet_address="0xYourWalletAddress"
+    )
+    print(link_result)
+    print("Please send USDC/USDT/DAI on Base to:")
+    print("0xd3cB24E0Ba20865C530831C85Bd6EbC25f6f3B60")
+
+# 3. Review spending history
+history = get_spend_history()
+print(history)
+```
+
+## Error Handling
+
+```python
+from hyperbolic_agentkit_core.actions import get_current_balance
+
+try:
+    balance = get_current_balance()
+    print(balance)
+except Exception as e:
+    print(f"Error retrieving balance: {e}")
+```
+
+If the API request fails, returns:
+```
+Error retrieving balance information: [error details]
+```
+
+## Response Format Details
+
+The function makes two API calls:
+
+1. **Get current balance**: Retrieves available credits
+2. **Get purchase history**: Retrieves past credit purchases
+
+Credit amounts are stored internally in cents and converted to dollars for display:
+
+```python
+credits = 12550  # Internal representation
+balance_usd = credits / 100  # $125.50
+```
+
+Purchase dates are formatted as:
+```python
+"Month Day, Year"  # e.g., "January 15, 2024"
+```
+
+## Related Actions
+
+- [Get Spend History](/api/hyperbolic/get-spend-history) - View GPU rental costs
+- [Link Wallet Address](/api/hyperbolic/link-wallet-address) - Connect wallet to add credits
+- [Rent Compute](/api/hyperbolic/rent-compute) - Use credits to rent GPUs

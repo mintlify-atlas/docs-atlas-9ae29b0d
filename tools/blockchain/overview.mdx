@@ -1,0 +1,128 @@
+---
+title: "Blockchain Tools Overview"
+description: "Overview of blockchain and wallet management capabilities powered by Coinbase Developer Platform (CDP) AgentKit"
+---
+
+## Introduction
+
+Hyperbolic AgentKit integrates with the Coinbase Developer Platform (CDP) to provide comprehensive blockchain capabilities. Through the CDP AgentKit, your AI agents can manage wallets, execute token operations, and interact with various blockchain protocols.
+
+## CDP Integration
+
+The framework uses the `coinbase_agentkit` package to provide blockchain functionality:
+
+```python
+from coinbase_agentkit import (
+    AgentKit,
+    AgentKitConfig,
+    CdpWalletProvider,
+    CdpWalletProviderConfig,
+    cdp_api_action_provider,
+    cdp_wallet_action_provider,
+    erc20_action_provider,
+    pyth_action_provider,
+    wallet_action_provider,
+    weth_action_provider,
+)
+from coinbase_agentkit_langchain import get_langchain_tools
+```
+
+## Action Providers
+
+The CDP integration supports multiple action providers, each offering specific blockchain capabilities:
+
+### Available Providers
+
+- **cdp_api_action_provider**: Core CDP API operations
+- **cdp_wallet_action_provider**: CDP-specific wallet operations
+- **erc20_action_provider**: ERC-20 token standard operations
+- **pyth_action_provider**: Pyth Network price oracle integration
+- **wallet_action_provider**: General wallet management
+- **weth_action_provider**: Wrapped ETH (WETH) operations
+
+## Initialization Example
+
+From `chatbot.py:445-472`, here's how blockchain tools are initialized:
+
+```python
+# Configure Coinbase AgentKit
+print_system("Initializing Coinbase AgentKit...")
+wallet_data = None
+if os.path.exists(wallet_data_file):
+    with open(wallet_data_file) as f:
+        wallet_data = f.read()
+
+# Configure wallet provider
+wallet_provider = CdpWalletProvider(CdpWalletProviderConfig(
+    api_key_name=os.getenv("CDP_API_KEY_NAME"),
+    api_key_private=os.getenv("CDP_API_KEY_PRIVATE"),
+    network_id=os.getenv("CDP_NETWORK_ID", "base-mainnet"),
+    wallet_data=wallet_data if wallet_data else None
+))
+
+# Initialize AgentKit with all action providers
+agent_kit = AgentKit(AgentKitConfig(
+    wallet_provider=wallet_provider,
+    action_providers=[
+        cdp_api_action_provider(),
+        cdp_wallet_action_provider(),
+        erc20_action_provider(),
+        pyth_action_provider(),
+        wallet_action_provider(),
+        weth_action_provider(),
+    ]
+))
+
+# Save wallet data for persistence
+if not wallet_data:
+    wallet_data = json.dumps(wallet_provider.export_wallet().to_dict())
+    with open(wallet_data_file, "w") as f:
+        f.write(wallet_data)
+```
+
+## Environment Configuration
+
+Required environment variables:
+
+```bash
+# Coinbase Developer Platform credentials
+CDP_API_KEY_NAME=your_api_key_name
+CDP_API_KEY_PRIVATE=your_private_key
+
+# Network configuration (default: base-mainnet)
+CDP_NETWORK_ID=base-mainnet
+
+# Enable/disable Coinbase tools
+USE_COINBASE_TOOLS=true
+```
+
+## Wallet Persistence
+
+Wallet data is automatically persisted to a local file (`wallet_data.txt` by default) to maintain wallet state across sessions. The wallet is created on first run and reused in subsequent sessions.
+
+## Adding Tools to Agent
+
+From `chatbot.py:373-377`:
+
+```python
+if os.getenv("USE_COINBASE_TOOLS", "true").lower() == "true":
+    print_system("Adding Coinbase AgentKit tools...")
+    coinbase_tools = get_langchain_tools(agent_kit)
+    tools.extend(coinbase_tools)
+    print_system(f"Added {len(coinbase_tools)} Coinbase tools")
+```
+
+## Supported Networks
+
+The CDP integration supports multiple blockchain networks. Configure the network using the `CDP_NETWORK_ID` environment variable:
+
+- `base-mainnet` (default)
+- `base-sepolia` (testnet)
+- `ethereum-mainnet`
+- `ethereum-sepolia`
+- And other supported CDP networks
+
+## Next Steps
+
+- [Wallet Management](/tools/blockchain/wallet-management) - Learn how to manage wallets
+- [Token Operations](/tools/blockchain/token-operations) - Execute token transfers and operations

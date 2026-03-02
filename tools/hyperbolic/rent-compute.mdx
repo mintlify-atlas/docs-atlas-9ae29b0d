@@ -1,0 +1,269 @@
+---
+title: Rent GPU Compute
+description: Rent GPU instances from the Hyperbolic marketplace and manage compute resources
+---
+
+The `rent_compute` tool allows your AI agent to rent GPU instances from the Hyperbolic marketplace. This enables agents to dynamically provision compute resources for training models, running inference, or other GPU-intensive tasks.
+
+## How It Works
+
+The typical workflow for renting compute:
+
+1. **Check Available GPUs** - Use `get_available_gpus` to see what's available
+2. **Rent an Instance** - Use `rent_compute` with cluster name, node name, and GPU count
+3. **Wait for Provisioning** - Check status with `get_gpu_status` until ready
+4. **Connect via SSH** - Use `ssh_connect` to access the instance
+5. **Execute Commands** - Use `remote_shell` to run workloads
+
+## Tool: rent_compute
+
+### Description
+
+Rents a GPU instance on the Hyperbolic platform.
+
+### Parameters
+
+<ParamField path="cluster_name" type="string" required>
+  The cluster name that contains the GPU node you want to rent
+</ParamField>
+
+<ParamField path="node_name" type="string" required>
+  The node ID of the specific GPU machine to rent
+</ParamField>
+
+<ParamField path="gpu_count" type="string" required>
+  The number of GPUs to rent from the node
+</ParamField>
+
+### Returns
+
+Returns a formatted JSON string with instance details:
+
+```json
+{
+  "instance_id": "respectful-rose-pelican",
+  "instance_name": "respectful-rose-pelican",
+  "status": "starting",
+  "cluster_name": "us-east-1-cluster",
+  "node_name": "node-abc123",
+  "gpu_count": 2,
+  "ssh_command": "ssh user@hostname -p 22"
+}
+```
+
+## Usage Examples
+
+### Basic Usage
+
+```python
+from hyperbolic_agentkit_core.actions import RentComputeAction
+
+# Initialize the action
+rent_action = RentComputeAction()
+
+# Rent 2 GPUs from a specific node
+result = rent_action.func(
+    cluster_name="us-east-1-cluster",
+    node_name="node-abc123",
+    gpu_count="2"
+)
+
+print(result)
+```
+
+### With LangChain Agent
+
+```python
+from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import create_react_agent
+from hyperbolic_langchain.agent_toolkits import HyperbolicToolkit
+from hyperbolic_langchain.utils import HyperbolicAgentkitWrapper
+
+# Setup
+hyperbolic = HyperbolicAgentkitWrapper()
+toolkit = HyperbolicToolkit.from_hyperbolic_agentkit_wrapper(hyperbolic)
+tools = toolkit.get_tools()
+
+llm = ChatOpenAI(model="gpt-4")
+agent = create_react_agent(llm, tools)
+
+# Let the agent handle the entire workflow
+events = agent.stream(
+    {"messages": [("user", "Rent me the cheapest 4 GPU instance available")]},
+    stream_mode="values",
+)
+
+for event in events:
+    event["messages"][-1].pretty_print()
+```
+
+<Note>
+The agent will automatically:
+1. Call `get_available_gpus` to see what's available
+2. Analyze pricing and availability
+3. Call `rent_compute` with the best option
+4. Monitor the instance until it's ready
+</Note>
+
+### Complete Workflow Example
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    GetAvailableGpusAction,
+    RentComputeAction,
+    GetGpuStatusAction
+)
+import json
+import time
+
+# Step 1: Get available GPUs
+get_gpus = GetAvailableGpusAction()
+available = get_gpus.func()
+print(available)
+
+# Step 2: Parse the output and select a GPU
+# (In a real scenario, you'd parse the text output)
+cluster_name = "us-east-1-cluster"
+node_name = "node-abc123"
+gpu_count = "2"
+
+# Step 3: Rent the compute
+rent = RentComputeAction()
+result = rent.func(
+    cluster_name=cluster_name,
+    node_name=node_name,
+    gpu_count=gpu_count
+)
+instance_data = json.loads(result)
+print(f"Rented instance: {instance_data['instance_id']}")
+
+# Step 4: Wait for instance to be ready
+get_status = GetGpuStatusAction()
+while True:
+    status = get_status.func()
+    status_data = json.loads(status) if isinstance(status, str) else status
+    
+    # Find our instance in the status list
+    our_instance = None
+    if isinstance(status_data, dict) and "instances" in status_data:
+        for inst in status_data["instances"]:
+            if inst.get("instance_id") == instance_data["instance_id"]:
+                our_instance = inst
+                break
+    
+    if our_instance and our_instance.get("status") == "running":
+        print(f"Instance is ready!")
+        print(f"SSH: {our_instance.get('ssh_command')}")
+        break
+    
+    print("Instance is starting... waiting 5 seconds")
+    time.sleep(5)
+```
+
+## Important Notes
+
+<Warning>
+**Always Check Available GPUs First**
+
+Before renting compute, you must:
+- Use `get_available_gpus` to get valid cluster names and node names
+- Ensure the node has enough available GPUs for your request
+- Check pricing to stay within budget
+</Warning>
+
+### Instance Lifecycle
+
+When you rent an instance:
+
+1. **Starting** - Instance is being provisioned (typically 30-60 seconds)
+2. **Running** - Instance is ready for SSH access
+3. **Terminated** - Instance has been shut down
+
+<Note>
+Use `get_gpu_status` to check the current state. If status is "starting", wait 5-10 seconds and check again.
+</Note>
+
+### Pricing
+
+GPU prices are displayed in **cents per hour**. For example:
+- Price: 500 = $5.00/hour per GPU
+- Price: 1250 = $12.50/hour per GPU
+
+Total cost = (GPU count) × (price per GPU) × (hours rented)
+
+## Error Handling
+
+```python
+import requests
+from hyperbolic_agentkit_core.actions import RentComputeAction
+
+try:
+    rent = RentComputeAction()
+    result = rent.func(
+        cluster_name="invalid-cluster",
+        node_name="invalid-node",
+        gpu_count="99"
+    )
+except requests.exceptions.RequestException as e:
+    print(f"Failed to rent compute: {e}")
+    # Handle error appropriately
+except ValueError as e:
+    print(f"Invalid parameters: {e}")
+```
+
+Common errors:
+- **Invalid cluster/node** - The specified cluster or node doesn't exist
+- **Insufficient GPUs** - The node doesn't have enough available GPUs
+- **Authentication failed** - Invalid or missing API key
+- **Insufficient balance** - Not enough credits in your account
+
+## Source Code Reference
+
+The `rent_compute` implementation is in:
+```
+hyperbolic_agentkit_core/actions/rent_compute.py:44-106
+```
+
+Key implementation details:
+
+```python
+def rent_compute(cluster_name: str, node_name: str, gpu_count: str) -> str:
+    """Creates a marketplace instance using the Hyperbolic API."""
+    
+    # Input validation
+    if not cluster_name or not node_name or not gpu_count:
+        raise ValueError("cluster_name, node_name, and gpu_count are required")
+    
+    # Get API key from environment
+    api_key = get_api_key()
+    
+    # API endpoint
+    endpoint = "https://api.hyperbolic.xyz/v1/marketplace/instances/create"
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+    payload = {
+        "cluster_name": cluster_name,
+        "node_name": node_name,
+        "gpu_count": gpu_count
+    }
+    
+    response = requests.post(endpoint, headers=headers, json=payload)
+    response.raise_for_status()
+    
+    return json.dumps(response.json(), indent=2)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Manage GPUs" icon="sliders" href="/tools/hyperbolic/manage-gpus">
+    Check status and terminate instances
+  </Card>
+  <Card title="SSH Access" icon="terminal" href="/tools/hyperbolic/ssh-access">
+    Connect to your rented instances
+  </Card>
+</CardGroup>

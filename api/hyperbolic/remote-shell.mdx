@@ -1,0 +1,222 @@
+---
+title: "Remote Shell"
+description: "Execute shell commands on the remote server via SSH"
+---
+
+## Overview
+
+The `remote_shell` action executes shell commands on a remote GPU server via an active SSH connection. This allows you to run any command on your rented GPU instances.
+
+## Function Signature
+
+```python
+def execute_remote_command(command: str) -> str
+```
+
+## Input Schema
+
+<ParamField path="command" type="string" required>
+  The shell command to execute on the remote server. Can be any valid Linux shell command.
+</ParamField>
+
+## Response
+
+Returns the command output as a string.
+
+<ResponseField name="output" type="string">
+  The stdout and stderr output from the executed command, or an error message if the command fails or no SSH connection exists.
+</ResponseField>
+
+## Example Usage
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    connect_ssh,
+    execute_remote_command
+)
+
+# First, establish SSH connection
+connect_ssh(
+    host="gpu-node-1.hyperbolic.xyz",
+    username="ubuntu",
+    port=2222
+)
+
+# Check GPU information
+output = execute_remote_command("nvidia-smi")
+print(output)
+
+# Install packages
+output = execute_remote_command("pip install torch transformers")
+print(output)
+
+# Run a training script
+output = execute_remote_command("python train.py --epochs 10")
+print(output)
+
+# Check disk usage
+output = execute_remote_command("df -h")
+print(output)
+```
+
+## Special Commands
+
+### Check SSH Status
+
+```python
+status = execute_remote_command("ssh_status")
+print(status)
+```
+
+Returns information about the current SSH connection state.
+
+## Common Use Cases
+
+### GPU Monitoring
+
+```python
+# Check GPU utilization
+execute_remote_command("nvidia-smi")
+
+# Monitor GPU memory
+execute_remote_command("nvidia-smi --query-gpu=memory.used,memory.total --format=csv")
+
+# Watch GPU usage in real-time
+execute_remote_command("watch -n 1 nvidia-smi")
+```
+
+### Environment Setup
+
+```python
+# Update system packages
+execute_remote_command("sudo apt update && sudo apt upgrade -y")
+
+# Install Python packages
+execute_remote_command("pip install numpy pandas scikit-learn")
+
+# Install CUDA-enabled PyTorch
+execute_remote_command("pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
+
+# Clone a repository
+execute_remote_command("git clone https://github.com/user/repo.git")
+```
+
+### Running Training Jobs
+
+```python
+# Run a Python script
+execute_remote_command("python train.py --batch-size 32 --lr 0.001")
+
+# Run in background with nohup
+execute_remote_command("nohup python long_training.py > output.log 2>&1 &")
+
+# Check running processes
+execute_remote_command("ps aux | grep python")
+```
+
+### File Operations
+
+```python
+# List files
+execute_remote_command("ls -la")
+
+# Check disk space
+execute_remote_command("df -h")
+
+# Download a dataset
+execute_remote_command("wget https://example.com/dataset.tar.gz")
+
+# Extract archive
+execute_remote_command("tar -xzf dataset.tar.gz")
+```
+
+## Important Notes
+
+- **Requires an active SSH connection** - Use `ssh_connect` first
+- Commands are executed in the connected SSH session
+- Use `ssh_status` to check current connection status
+- Returns command output as a string
+- You can install any packages you need on the remote server
+- Long-running commands may timeout - consider using background processes with `nohup` or `screen`
+- Each command is executed independently (no persistent shell state between calls)
+
+## Error Handling
+
+If no SSH connection is active:
+
+```
+Error: No active SSH connection. Please connect to a remote server first using ssh_connect.
+```
+
+You must establish an SSH connection before executing commands:
+
+```python
+from hyperbolic_agentkit_core.actions import connect_ssh, execute_remote_command
+
+# This will fail
+try:
+    execute_remote_command("ls")
+except Exception as e:
+    print(e)  # Error: No active SSH connection
+
+# First connect, then execute
+connect_ssh(host="example.com", username="user")
+execute_remote_command("ls")  # Success
+```
+
+## Complete Workflow Example
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    rent_compute,
+    get_gpu_status,
+    connect_ssh,
+    execute_remote_command,
+    terminate_compute
+)
+import time
+import json
+
+# 1. Rent a GPU
+rent_result = rent_compute(
+    cluster_name="us-east-1",
+    node_name="node-abc123",
+    gpu_count="1"
+)
+instance = json.loads(rent_result)
+instance_id = instance["id"]
+
+# 2. Wait for GPU to start
+while True:
+    status = json.loads(get_gpu_status())
+    instances = status.get("instances", [])
+    my_instance = next((i for i in instances if i["id"] == instance_id), None)
+    
+    if my_instance and my_instance["status"] == "running":
+        ssh_cmd = my_instance["ssh_command"]
+        # Parse ssh command to get host and port
+        break
+    
+    time.sleep(5)
+
+# 3. Connect via SSH
+connect_ssh(
+    host="gpu-node-1.hyperbolic.xyz",
+    username="ubuntu",
+    port=2222
+)
+
+# 4. Setup environment and run training
+execute_remote_command("pip install torch transformers")
+execute_remote_command("git clone https://github.com/user/ml-project.git")
+execute_remote_command("cd ml-project && python train.py")
+
+# 5. Cleanup
+terminate_compute(instance_id=instance_id)
+```
+
+## Related Actions
+
+- [SSH Access](/api/hyperbolic/ssh-access) - Establish SSH connection
+- [Get GPU Status](/api/hyperbolic/get-gpu-status) - Get SSH connection details
+- [Rent Compute](/api/hyperbolic/rent-compute) - Rent GPU instances

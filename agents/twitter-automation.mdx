@@ -1,0 +1,726 @@
+---
+title: 'Twitter Automation'
+description: 'Build autonomous Twitter agents that create content, engage with mentions, and interact with key opinion leaders'
+---
+
+## Overview
+
+Twitter Automation mode enables fully autonomous AI agents that operate on Twitter/X. These agents create original tweets, respond to mentions, and engage with key opinion leaders (KOLs) while maintaining consistent character personalities.
+
+## Key Features
+
+- **Autonomous Tweet Generation** - Create original content based on knowledge bases
+- **Mention Monitoring** - Automatically detect and respond to mentions
+- **KOL Engagement** - Interact with influential accounts strategically
+- **State Management** - Track replied tweets and reposted content
+- **Rate Limiting** - Respect Twitter API limits with configurable intervals
+- **Character Consistency** - Maintain personality across all interactions
+
+## Architecture
+
+The automation system uses:
+- **LangChain ReAct Agent** for decision making
+- **Twitter API v2** for social media operations
+- **State Persistence** for tracking interactions
+- **Knowledge Bases** for contextual content generation
+- **Scheduled Loops** for continuous operation
+
+## Implementation
+
+### Twitter State Management
+
+Track which tweets have been interacted with to avoid duplicates:
+
+```python twitter_agent/twitter_state.py
+from datetime import datetime
+import json
+
+class TwitterState:
+    def __init__(self):
+        self.replied_tweets = set()
+        self.reposted_tweets = set()
+        self.last_mention_id = None
+        self.last_check_time = None
+    
+    def has_replied_to(self, tweet_id: str) -> bool:
+        """Check if we've already replied to this tweet"""
+        return tweet_id in self.replied_tweets
+    
+    def add_replied_tweet(self, tweet_id: str) -> str:
+        """Mark a tweet as replied to"""
+        self.replied_tweets.add(tweet_id)
+        self.save()
+        return f"Added tweet {tweet_id} to replied database"
+    
+    def has_reposted(self, tweet_id: str) -> bool:
+        """Check if we've already reposted this tweet"""
+        return tweet_id in self.reposted_tweets
+    
+    def add_reposted_tweet(self, tweet_id: str) -> str:
+        """Mark a tweet as reposted"""
+        self.reposted_tweets.add(tweet_id)
+        self.save()
+        return f"Added tweet {tweet_id} to reposted database"
+    
+    def can_check_mentions(self) -> bool:
+        """Check if enough time has passed since last mention check"""
+        if self.last_check_time is None:
+            return True
+        elapsed = (datetime.now() - self.last_check_time).total_seconds()
+        return elapsed >= MENTION_CHECK_INTERVAL
+    
+    def save(self):
+        """Persist state to disk"""
+        with open('twitter_state.json', 'w') as f:
+            json.dump({
+                'replied_tweets': list(self.replied_tweets),
+                'reposted_tweets': list(self.reposted_tweets),
+                'last_mention_id': self.last_mention_id,
+                'last_check_time': self.last_check_time.isoformat() if self.last_check_time else None
+            }, f)
+    
+    def load(self):
+        """Load state from disk"""
+        try:
+            with open('twitter_state.json', 'r') as f:
+                data = json.load(f)
+                self.replied_tweets = set(data.get('replied_tweets', []))
+                self.reposted_tweets = set(data.get('reposted_tweets', []))
+                self.last_mention_id = data.get('last_mention_id')
+                last_check = data.get('last_check_time')
+                self.last_check_time = datetime.fromisoformat(last_check) if last_check else None
+        except FileNotFoundError:
+            pass
+```
+
+### Automation Loop
+
+The main automation function runs continuously with configured intervals:
+
+```python chatbot.py
+async def run_twitter_automation(agent_executor, config, runnable_config):
+    """Run the agent autonomously with specified intervals."""
+    print_system(f"Starting autonomous mode as {config['character']['name']}...")
+    twitter_state.load()
+    
+    # Reset last_check_time on startup to ensure immediate first run
+    twitter_state.last_check_time = None
+    twitter_state.save()
+    
+    # Create the runnable config with required keys
+    runnable_config = RunnableConfig(
+        recursion_limit=200,
+        configurable={
+            "thread_id": config["configurable"]["thread_id"],
+            "langgraph_checkpoint_ns": "chat_mode",
+            "langgraph_checkpoint_id": config["configurable"]["langgraph_checkpoint_id"]
+        }
+    )
+    
+    while True:
+        try:
+            # Check mention timing - only wait if we've checked too recently
+            if not twitter_state.can_check_mentions():
+                wait_time = MENTION_CHECK_INTERVAL - (datetime.now() - twitter_state.last_check_time).total_seconds()
+                if wait_time > 0:
+                    print_system(f"Waiting {int(wait_time)} seconds before next mention check...")
+                    await asyncio.sleep(wait_time)
+                    continue
+            
+            # Update last_check_time at the start of each check
+            twitter_state.last_check_time = datetime.now()
+            twitter_state.save()
+            
+            # Select unique KOLs for interaction using random.sample
+            NUM_KOLS = 1  # Number of KOLs to interact with per cycle
+            selected_kols = random.sample(config['character']['kol_list'], NUM_KOLS)
+            
+            # Log selected KOLs
+            for i, kol in enumerate(selected_kols, 1):
+                print_system(f"Selected KOL {i}: {kol['username']}")
+            
+            # Execute automation tasks
+            await execute_twitter_tasks(agent_executor, config, selected_kols, runnable_config)
+            
+            print_system(f"Completed cycle. Waiting {MENTION_CHECK_INTERVAL/60} minutes before next check...")
+            await asyncio.sleep(MENTION_CHECK_INTERVAL)
+        
+        except KeyboardInterrupt:
+            print_system("\nSaving state and exiting...")
+            twitter_state.save()
+            sys.exit(0)
+        
+        except Exception as e:
+            print_error(f"Unexpected error: {str(e)}")
+            print_system("Continuing after error...")
+            await asyncio.sleep(MENTION_CHECK_INTERVAL)
+```
+
+### Task Prompt
+
+The agent receives structured instructions for each automation cycle:
+
+```python chatbot.py
+thought = f"""
+You are an AI-powered Twitter bot acting as a marketer for The Rollup Podcast (@therollupco). 
+Your primary functions are to create engaging original tweets, respond to mentions, and interact 
+with key opinion leaders (KOLs) in the blockchain and cryptocurrency industry.
+
+Here's the essential information for your operation:
+
+<kol_list>
+{kol_xml}
+</kol_list>
+
+<account_info>
+{config['character']['accountid']}
+</account_info>
+
+<twitter_settings>
+<mention_check_interval>{MENTION_CHECK_INTERVAL}</mention_check_interval>
+<last_mention_id>{twitter_state.last_mention_id}</last_mention_id>
+<current_time>{datetime.now().strftime('%H:%M:%S')}</current_time>
+</twitter_settings>
+
+For each task, read the entire task instructions before taking action. 
+Wrap your reasoning inside <reasoning> tags before taking action.
+
+Task 1: Query podcast knowledge base and recent tweets
+
+First, gather context from recent tweets using get_user_tweets() for each of these accounts:
+Account 1: 1172866088222244866
+Account 2: 1046811588752285699  
+Account 3: 2680433033
+
+Then query the podcast knowledge base:
+
+<podcast_query>
+{await generate_podcast_query()}
+</podcast_query>
+
+<reasoning>
+1. Analyze all available context:
+- Review all recent tweets retrieved from the accounts
+- Analyze the podcast knowledge base query results
+- Identify common themes and topics across both sources
+- Note key insights that could inform an engaging tweet
+
+2. Synthesize information:
+- Find connections between recent tweets and podcast content
+- Identify trending topics or discussions
+- Look for opportunities to add unique value or insights
+- Consider how to build on existing conversations
+
+3. Brainstorm tweet ideas:
+Tweet Guidelines:
+- Ideal length: Less than 70 characters
+- Maximum length: 280 characters
+- Emoji usage: Do not use emojis
+- Content references: Use evergreen language when referencing podcast content
+    - DO: "We explored this topic in our podcast"
+    - DO: "Check out our podcast episode about [topic]"
+    - DO: "We discussed this in depth on @therollupco"
+    - DON'T: "In our latest episode..."
+    - DON'T: "Just released..."
+    - DON'T: "Our newest episode..."
+- Generate at least three distinct tweet ideas that combine insights from both sources
+
+4. Evaluate and refine tweets:
+- Assess each tweet for engagement potential, relevance, and clarity
+- Refine the tweets to improve their impact and adhere to guidelines
+- Ensure references to podcast content are accurate and timeless
+
+5. Select the best tweet:
+- Choose the most effective tweet based on your evaluation
+- Explain why this tweet best combines recent context with podcast insights
+</reasoning>
+
+After your reasoning, create and post your tweet using the create_tweet() function.
+
+Task 2: Check for and reply to new Twitter mentions
+
+Use the get_mentions() function to retrieve new mentions. For each mention newer than the last_mention_id:
+
+<reasoning>
+1. Analyze the mention:
+- Summarize the content of the mention
+- Identify any specific questions or topics related to blockchain and cryptocurrency
+- Determine the sentiment (positive, neutral, negative) of the mention
+
+2. Determine reply appropriateness:
+- Check if you've already responded using has_replied_to()
+- Assess if the mention requires a response based on its content and relevance
+- Explain your decision to reply or not
+
+3. Craft a response (if needed):
+- Outline key points to address in your reply
+- Consider how to add value or insights to the conversation
+- Draft a response that is engaging, informative, and aligned with your persona
+
+4. Review and refine:
+- Ensure the response adheres to character limits and style guidelines
+- Check that the reply is relevant to blockchain and cryptocurrency
+- Verify that the tone is friendly and encouraging further discussion
+</reasoning>
+
+If you decide to reply:
+1. Create a response using the reply_to_tweet() function
+2. Mark the tweet as replied using the add_replied_tweet() function
+
+Task 3: Interact with KOLs
+
+For each KOL in the provided list:
+
+<reasoning>
+1. Retrieve and analyze recent tweets:
+- Use get_user_tweets() to fetch recent tweets
+- Summarize the main topics and themes in the KOL's recent tweets
+- Identify tweets specifically related to blockchain and cryptocurrency
+
+2. Select a tweet to reply to:
+- List the top 3 most relevant tweets for potential interaction
+- For each tweet, explain its relevance to blockchain/cryptocurrency
+- Choose the best tweet for reply, justifying your selection
+
+3. Formulate a reply:
+- Identify unique insights or perspectives you can add
+- Draft 2-3 potential replies, each offering a different angle
+- Evaluate each draft for engagement potential and alignment with your persona
+
+4. Finalize the reply:
+- Select the best reply from your drafts
+- Ensure the chosen reply meets all guidelines
+- Explain why this reply is most effective for engaging the KOL
+</reasoning>
+
+After your reasoning:
+1. Select the most relevant and recent tweet to reply to
+2. Create a reply for the selected tweet using the reply_to_tweet() function
+
+General Guidelines:
+1. Stay in character with consistent personality traits
+2. Ensure all interactions are relevant to blockchain and cryptocurrency
+3. Be friendly, witty, and engaging
+4. Share interesting insights or thought-provoking perspectives
+5. Ask follow-up questions to encourage discussion when appropriate
+6. Adhere to the character limits and style guidelines
+"""
+
+# Process chunks as they arrive using async for
+async for chunk in agent_executor.astream(
+    {"messages": [HumanMessage(content=thought)]},
+    runnable_config
+):
+    if "agent" in chunk:
+        response = chunk["agent"]["messages"][0].content
+        print_ai(format_ai_message_content(response))
+    elif "tools" in chunk:
+        print_system(chunk["tools"]["messages"][0].content)
+```
+
+## Configuration
+
+### Environment Variables
+
+Configure Twitter automation in your `.env` file:
+
+```bash .env
+# Twitter/X Integration (Required)
+TWITTER_ACCESS_TOKEN=your_twitter_access_token
+TWITTER_API_KEY=your_twitter_api_key
+TWITTER_API_SECRET=your_twitter_api_secret
+TWITTER_ACCESS_TOKEN_SECRET=your_twitter_access_token_secret
+TWITTER_BEARER_TOKEN=your_twitter_bearer_token
+TWITTER_CLIENT_ID=your_twitter_client_id
+TWITTER_CLIENT_SECRET=your_twitter_client_secret
+
+# Twitter Tools (Enable/Disable Features)
+USE_TWITTER_CORE=true
+USE_TWEET_REPLY_TRACKING=true
+USE_TWEET_REPOST_TRACKING=true
+USE_TWEET_DELETE=true
+USE_USER_ID_LOOKUP=true
+USE_USER_TWEETS_LOOKUP=true
+USE_RETWEET=true
+
+# Knowledge Bases
+USE_TWITTER_KNOWLEDGE_BASE=true
+USE_PODCAST_KNOWLEDGE_BASE=true
+
+# Character Configuration
+CHARACTER_FILE=characters/default.json
+```
+
+### Character KOL List
+
+Define key opinion leaders to engage with in your character file:
+
+```json characters/default.json
+{
+  "name": "your_bot_name",
+  "accountid": "123456789",
+  "kol_list": [
+    {
+      "username": "aixbt_agent",
+      "user_id": "1852674305517342720"
+    },
+    {
+      "username": "0xMert_",
+      "user_id": "1309886201944473600"
+    },
+    {
+      "username": "sassal0x",
+      "user_id": "313724502"
+    },
+    {
+      "username": "jessepollak",
+      "user_id": "18876842"
+    }
+  ],
+  "topics": [
+    "defi",
+    "ethereum",
+    "zk_rollups",
+    "solana"
+  ],
+  "style": {
+    "all": [
+      "uses short punchy one-liners",
+      "favors concise, single-sentence responses",
+      "employs strategic brevity - keeps most posts under 45 chars",
+      "does not use emojis often",
+      "optimizes for high signal-to-noise ratio"
+    ]
+  }
+}
+```
+
+## State Management Tools
+
+The agent has access to state management tools:
+
+```python chatbot.py
+from langchain.tools import Tool
+
+# Create tools for Twitter state management
+check_replied_tool = Tool(
+    name="has_replied_to",
+    func=twitter_state.has_replied_to,
+    description="""Check if we have already replied to a specific tweet ID. 
+    Input should be a tweet ID string. Returns True if already replied, False otherwise."""
+)
+
+add_replied_tool = Tool(
+    name="add_replied_to",
+    func=twitter_state.add_replied_tweet,
+    description="""Mark a tweet as replied to avoid duplicate responses. 
+    Input should be the tweet ID that was replied to. 
+    Call this AFTER successfully posting a reply."""
+)
+
+check_reposted_tool = Tool(
+    name="has_reposted",
+    func=twitter_state.has_reposted,
+    description="""Check if we have already reposted a specific tweet ID. 
+    Input should be a tweet ID string. Returns True if already reposted, False otherwise."""
+)
+
+add_reposted_tool = Tool(
+    name="add_reposted",
+    func=twitter_state.add_reposted_tweet,
+    description="""Mark a tweet as reposted to avoid duplicate retweets. 
+    Input should be the tweet ID that was reposted. 
+    Call this AFTER successfully reposting."""
+)
+```
+
+## Running the Automation
+
+Start the Twitter automation bot:
+
+```bash Terminal
+python chatbot.py
+```
+
+Select automation mode when prompted:
+
+```
+Available modes:
+1. Interactive chat mode
+2. Character Twitter Automation
+
+Choose a mode (enter number): 2
+```
+
+The bot will:
+1. Load character configuration and state
+2. Initialize knowledge bases (if configured)
+3. Begin the automation loop
+4. Create tweets, respond to mentions, and engage with KOLs
+5. Save state after each cycle
+
+## Timing Configuration
+
+Control automation intervals:
+
+```python twitter_agent/twitter_state.py
+# Check for mentions every 30 minutes
+MENTION_CHECK_INTERVAL = 1800  # seconds
+
+# Maximum mentions to process per interval
+MAX_MENTIONS_PER_INTERVAL = 10
+```
+
+## Knowledge Base Integration
+
+The agent queries knowledge bases for contextual content:
+
+### Podcast Knowledge Base
+
+```python chatbot.py
+async def generate_podcast_query() -> str:
+    """Generate a dynamic query for the podcast knowledge base using an LLM."""
+    llm = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    
+    # Format the prompt with random selections
+    prompt = PODCAST_QUERY_PROMPT.format(
+        topics=random.sample(PODCAST_TOPICS, 3),
+        aspects=random.sample(PODCAST_ASPECTS, 2)
+    )
+    
+    # Get response from LLM
+    response = await llm.ainvoke([HumanMessage(content=prompt)])
+    query = response.content.strip()
+    
+    return query
+```
+
+### Twitter Knowledge Base
+
+```python chatbot.py
+if os.getenv("USE_TWITTER_KNOWLEDGE_BASE", "true").lower() == "true":
+    tools.append(Tool(
+        name="query_twitter_knowledge_base",
+        description="""Query the Twitter knowledge base containing tweets from key opinion leaders. 
+        Use this to understand current discussions, trending topics, and community sentiment. 
+        Input should be a question or topic to search for.""",
+        func=lambda query: knowledge_base.query_knowledge_base(query)
+    ))
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Rate Limiting" icon="clock">
+    - Respect Twitter API limits
+    - Space out interactions naturally
+    - Monitor for rate limit errors
+    - Adjust intervals as needed
+  </Card>
+  
+  <Card title="Content Quality" icon="sparkles">
+    - Use knowledge bases for context
+    - Maintain character consistency
+    - Add unique insights to conversations
+    - Avoid repetitive responses
+  </Card>
+  
+  <Card title="State Management" icon="database">
+    - Always track replied/reposted tweets
+    - Save state after each operation
+    - Handle crashes gracefully
+    - Backup state files regularly
+  </Card>
+  
+  <Card title="Engagement Strategy" icon="users">
+    - Focus on relevant KOLs
+    - Engage with genuine insights
+    - Vary topics across tweets
+    - Build authentic community presence
+  </Card>
+</CardGroup>
+
+## Monitoring and Debugging
+
+### Logging
+
+The agent provides detailed logging:
+
+```python
+from base_utils.utils import print_system, print_ai, print_error
+
+print_system(f"Starting autonomous mode as {character_name}...")
+print_system(f"Selected KOL: {kol['username']}")
+print_ai("Generated tweet: [tweet content]")
+print_error(f"Unexpected error: {str(e)}")
+```
+
+### State Inspection
+
+Check the current state:
+
+```python
+# Load and inspect state
+twitter_state = TwitterState()
+twitter_state.load()
+
+print(f"Replied tweets: {len(twitter_state.replied_tweets)}")
+print(f"Reposted tweets: {len(twitter_state.reposted_tweets)}")
+print(f"Last mention ID: {twitter_state.last_mention_id}")
+print(f"Last check: {twitter_state.last_check_time}")
+```
+
+## Error Handling
+
+The automation loop handles errors gracefully:
+
+```python chatbot.py
+try:
+    # Execute automation tasks
+    await execute_twitter_tasks(...)
+except KeyboardInterrupt:
+    print_system("\nSaving state and exiting...")
+    twitter_state.save()
+    sys.exit(0)
+except Exception as e:
+    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Error type: {type(e).__name__}")
+    if hasattr(e, '__traceback__'):
+        import traceback
+        traceback.print_tb(e.__traceback__)
+    
+    print_system("Continuing after error...")
+    await asyncio.sleep(MENTION_CHECK_INTERVAL)
+```
+
+## Deployment Considerations
+
+<Steps>
+  <Step title="Secure API Credentials">
+    Store Twitter API keys in environment variables or secrets manager
+  </Step>
+  
+  <Step title="Use Process Manager">
+    Run with systemd, pm2, or supervisor for automatic restarts
+  </Step>
+  
+  <Step title="Monitor State Files">
+    Regularly backup `twitter_state.json` and knowledge base data
+  </Step>
+  
+  <Step title="Set Up Alerting">
+    Monitor for errors, API rate limits, and unexpected behavior
+  </Step>
+  
+  <Step title="Schedule Maintenance">
+    Plan for periodic knowledge base updates and state cleanup
+  </Step>
+</Steps>
+
+## Advanced Features
+
+### Dynamic Query Generation
+
+Generate contextually relevant queries using LLMs:
+
+```python chatbot.py
+PODCAST_QUERY_PROMPT = """
+Generate a specific, insightful query for a podcast knowledge base.
+
+Topics to consider: {topics}
+Aspects to explore: {aspects}
+
+Create a question that would yield interesting insights about these topics.
+Be specific and avoid generic queries.
+"""
+
+query = await generate_llm_podcast_query(llm)
+```
+
+### Character Personality Processing
+
+```python chatbot.py
+def process_character_config(character: Dict[str, Any]) -> str:
+    """Process character configuration into agent personality."""
+    bio = "\n".join([f"- {item}" for item in character.get('bio', [])])
+    lore = "\n".join([f"- {item}" for item in character.get('lore', [])])
+    knowledge = "\n".join([f"- {item}" for item in character.get('knowledge', [])])
+    topics = "\n".join([f"- {item}" for item in character.get('topics', [])])
+    style_all = "\n".join([f"- {item}" for item in character.get('style', {}).get('all', [])])
+    adjectives = "\n".join([f"- {item}" for item in character.get('adjectives', [])])
+    
+    # Select random post examples
+    all_posts = character.get('postExamples', [])
+    selected_posts = random.sample(all_posts, min(10, len(all_posts)))
+    post_examples = "\n".join([f"Example {i+1}: {post}" for i, post in enumerate(selected_posts)])
+    
+    return f"""
+    <post_examples>
+    {post_examples}
+    </post_examples>
+    
+    <character_bio>
+    {bio}
+    </character_bio>
+    
+    <character_knowledge>
+    {knowledge}
+    </character_knowledge>
+    
+    <style_guidelines>
+    {style_all}
+    </style_guidelines>
+    """
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Agent not posting tweets">
+    - Verify Twitter API credentials are valid
+    - Check `USE_TWITTER_CORE=true` in .env
+    - Review error logs for API rate limits
+    - Ensure character configuration is loaded
+  </Accordion>
+  
+  <Accordion title="Duplicate replies">
+    - Confirm `USE_TWEET_REPLY_TRACKING=true`
+    - Check `twitter_state.json` is being saved
+    - Verify `has_replied_to()` is called before replying
+    - Ensure `add_replied_to()` is called after successful replies
+  </Accordion>
+  
+  <Accordion title="Low engagement">
+    - Review tweet content quality
+    - Adjust character style guidelines
+    - Select more relevant KOLs
+    - Improve knowledge base queries
+  </Accordion>
+  
+  <Accordion title="Knowledge base errors">
+    - Initialize knowledge bases before starting
+    - Check embedding model is loaded
+    - Verify data files exist and are accessible
+    - Review query format and syntax
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Chat Agent" icon="message" href="/agents/chat-agent">
+    Build interactive conversational agents
+  </Card>
+  
+  <Card title="Voice Agent" icon="microphone" href="/agents/voice-agent">
+    Add voice interaction capabilities
+  </Card>
+  
+  <Card title="Knowledge Bases" icon="book" href="/guides/working-with-knowledge-bases">
+    Configure and optimize knowledge bases
+  </Card>
+  
+  <Card title="Custom Tools" icon="wrench" href="/concepts/tools">
+    Create specialized Twitter tools
+  </Card>
+</CardGroup>

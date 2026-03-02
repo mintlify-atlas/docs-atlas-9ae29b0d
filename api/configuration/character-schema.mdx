@@ -1,0 +1,287 @@
+---
+title: "Character Schema"
+description: "JSON schema for configuring AI agent characters"
+---
+
+## Overview
+
+The character schema defines the personality, knowledge, and behavior of your AI agent. Character files are JSON documents that configure how the agent communicates, what it knows, and how it interacts on social media.
+
+## Schema Structure
+
+### Basic Information
+
+<ParamField path="name" type="string" required>
+  The character's name. Used as the agent's identity.
+</ParamField>
+
+<ParamField path="accountid" type="string" required>
+  Twitter/X account ID for social media integration.
+</ParamField>
+
+<ParamField path="clients" type="array" default='["twitter"]'>
+  Array of client platforms the agent will use.
+</ParamField>
+
+<ParamField path="modelProvider" type="string" default="anthropic">
+  LLM provider. Currently supports "anthropic".
+</ParamField>
+
+<ParamField path="system" type="string">
+  System-level instruction for the agent's primary function.
+</ParamField>
+
+### Personality Configuration
+
+<ParamField path="bio" type="array" required>
+  Array of strings describing the character's background, roles, and identity.
+</ParamField>
+
+<ParamField path="lore" type="array" required>
+  Array of strings defining the character's beliefs, vision, and worldview.
+</ParamField>
+
+<ParamField path="knowledge" type="array" required>
+  Array of strings describing the character's expertise and areas of knowledge.
+</ParamField>
+
+<ParamField path="adjectives" type="array" required>
+  Array of adjectives describing the character's personality traits.
+</ParamField>
+
+### Communication Style
+
+<ParamField path="style" type="object" required>
+  Object containing style guidelines.
+  
+  <ParamField path="style.all" type="array" required>
+    Array of strings defining writing style, tone, and communication patterns for all contexts.
+  </ParamField>
+</ParamField>
+
+<ParamField path="postExamples" type="array" required>
+  Array of example posts demonstrating the character's writing style. Can contain thousands of examples.
+</ParamField>
+
+<ParamField path="messageExamples" type="array">
+  Array of conversation examples showing interaction patterns. Each example is an array of message objects.
+</ParamField>
+
+### Topics and Interests
+
+<ParamField path="topics" type="array" required>
+  Array of topics the character is interested in or knowledgeable about.
+</ParamField>
+
+### Social Media Configuration
+
+<ParamField path="kol_list" type="array" required>
+  Array of Key Opinion Leaders (KOLs) for the agent to interact with.
+  
+  Each KOL object contains:
+  - `username`: Twitter handle
+  - `user_id`: Twitter user ID
+</ParamField>
+
+## Complete Example
+
+```json
+{
+  "name": "ChainYoda",
+  "accountid": "123456789",
+  "clients": ["twitter"],
+  "modelProvider": "anthropic",
+  "system": "Roleplay and generate interesting content on behalf of user.",
+  
+  "bio": [
+    "Core contributor at hadron founders club",
+    "Advisor to @0xPolygon",
+    "Champion of transparency and trust in decentralized systems",
+    "Angel investor focusing on strong product and engineering founders"
+  ],
+  
+  "lore": [
+    "Believes that blockchains will change how financial systems work",
+    "Advocates for liquid and efficient private markets through tokenization",
+    "Supporter of Solana, Ethereum, Polygon, Avail, Eigenlayer and Hyperbolic",
+    "Has a vision for AI agents to be loyal to their human creators"
+  ],
+  
+  "knowledge": [
+    "Deep understanding of blockchain technology and its implications",
+    "Expertise in decentralized finance (DeFi) and its mechanisms",
+    "Awareness of current trends in AI and machine learning",
+    "Knows about different blockchains and their technical differences"
+  ],
+  
+  "adjectives": [
+    "funny",
+    "intelligent",
+    "academic",
+    "insightful"
+  ],
+  
+  "topics": [
+    "defi",
+    "nft",
+    "ethereum",
+    "bitcoin",
+    "solana",
+    "eigenlayer",
+    "hyperbolic"
+  ],
+  
+  "style": {
+    "all": [
+      "uses short punchy one-liners",
+      "favors concise, single-sentence responses",
+      "balances technical depth with accessible commentary",
+      "emphasizes building over speculation",
+      "employs strategic brevity - keeps most posts under 45 chars",
+      "uses crypto vernacular naturally but sparingly (gm, ngmi, lfg)",
+      "does not use emojis often, use one if directly relevant",
+      "maintains builder credibility while staying humble"
+    ]
+  },
+  
+  "postExamples": [
+    "building in public >>> theorizing in private",
+    "the best time to start was yesterday. second best is now.",
+    "bear markets build character. and products."
+  ],
+  
+  "messageExamples": [
+    [
+      {
+        "user": "{{user1}}",
+        "content": {
+          "text": "hey can you help me with something"
+        }
+      },
+      {
+        "user": "ChainYoda",
+        "content": {
+          "text": "i'm kinda busy but i can probably step away for a minute, whatcha need"
+        }
+      }
+    ]
+  ],
+  
+  "kol_list": [
+    {
+      "username": "vitalikbuterin",
+      "user_id": "295218901"
+    },
+    {
+      "username": "jessepollak",
+      "user_id": "18876842"
+    }
+  ]
+}
+```
+
+## Usage
+
+### Setting Character File
+
+Specify the character file in your `.env`:
+
+```bash
+CHARACTER_FILE=characters/chainyoda.json
+```
+
+### Loading Characters
+
+The `initialize_agent()` function automatically loads the character:
+
+```python
+from chatbot import initialize_agent
+
+agent_executor, config, runnable_config = await initialize_agent()
+
+# Access character configuration
+character = config["character"]
+print(character["name"])  # "ChainYoda"
+print(character["bio"])   # Array of bio strings
+```
+
+### Multiple Characters
+
+You can specify multiple character files (comma-separated):
+
+```bash
+CHARACTER_FILE=characters/character1.json,characters/character2.json
+```
+
+The first character in the list is used by default.
+
+## Character Processing
+
+The `process_character_config()` function transforms the JSON into an agent personality prompt:
+
+```python
+def process_character_config(character: Dict[str, Any]) -> str
+```
+
+This function:
+
+1. Extracts bio, lore, knowledge, and style guidelines
+2. Selects random post examples (up to 10)
+3. Formats everything into a structured prompt
+4. Returns a personality string used as the agent's `state_modifier`
+
+## Best Practices
+
+### Bio
+
+- Keep entries concise (one line each)
+- Focus on roles, affiliations, and identity
+- Include relevant credentials and expertise
+
+### Lore
+
+- Define beliefs and worldview
+- Establish philosophical positions
+- Show what the character cares about
+
+### Knowledge
+
+- List specific areas of expertise
+- Include both technical and soft skills
+- Mention personality traits (humor, etc.)
+
+### Style Guidelines
+
+- Be specific about writing patterns
+- Include length preferences (character counts)
+- Define tone and voice characteristics
+- Specify emoji usage preferences
+- Note any special formatting or vocabulary
+
+### Post Examples
+
+- Provide many examples (10-1000+)
+- Show variety in topics and formats
+- Demonstrate the actual voice and style
+- Can be scraped from existing Twitter accounts
+
+### KOL List
+
+- Include relevant influencers in your domain
+- Both username and user_id are required
+- Used for automated social media interactions
+
+## Template File
+
+A template character file is available at:
+
+```
+characters/template.json
+```
+
+Duplicate and customize this file to create your own character.
+
+## Related Documentation
+
+- [Agent Initialization](/api/configuration/agent-initialization) - How characters are loaded
+- [Environment Variables](/api/configuration/environment-variables) - CHARACTER_FILE configuration

@@ -1,0 +1,367 @@
+---
+title: 'Chat Agent'
+description: 'Build interactive chat agents with LangChain and Claude for conversational AI experiences'
+---
+
+## Overview
+
+The Chat Agent mode provides an interactive conversational interface where users can directly interact with AI agents powered by Claude. This mode supports tool usage, character personalities, and knowledge base queries.
+
+## Architecture
+
+The chat agent is built on:
+- **LangChain** for agent orchestration
+- **Claude (Anthropic)** as the LLM provider
+- **LangGraph** for state management and checkpointing
+- **ReAct pattern** for reasoning and action
+
+## Implementation
+
+### Agent Initialization
+
+The agent is created using LangGraph's `create_react_agent` with memory persistence:
+
+```python chatbot.py
+from langchain_anthropic import ChatAnthropic
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import create_react_agent
+
+async def initialize_agent():
+    # Initialize Claude LLM
+    llm = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    
+    # Load character configuration
+    characters = loadCharacters(os.getenv("CHARACTER_FILE"))
+    character = characters[0]
+    personality = process_character_config(character)
+    
+    # Create tools (blockchain, Twitter, search, etc.)
+    tools = create_agent_tools(llm, knowledge_base, podcast_knowledge_base, agent_kit, config)
+    
+    # Initialize memory for conversation history
+    memory = MemorySaver()
+    
+    # Create ReAct agent with personality
+    agent = create_react_agent(
+        llm,
+        tools=tools,
+        checkpointer=memory,
+        state_modifier=personality,
+    )
+    
+    return agent, config, runnable_config
+```
+
+### Running Chat Mode
+
+The chat mode provides an interactive REPL with streaming responses:
+
+```python chatbot.py
+async def run_chat_mode(agent_executor, config, runnable_config):
+    print_system("Starting chat mode... Type 'exit' to end.")
+    print_system("Commands:")
+    print_system("  exit     - Exit the chat")
+    print_system("  status   - Check if agent is responsive")
+    
+    # Create the runnable config with required keys
+    runnable_config = RunnableConfig(
+        recursion_limit=200,
+        configurable={
+            "thread_id": config["configurable"]["thread_id"],
+            "langgraph_checkpoint_ns": "chat_mode",
+            "langgraph_checkpoint_id": config["configurable"]["langgraph_checkpoint_id"]
+        }
+    )
+    
+    while True:
+        try:
+            user_input = input("User: ")
+            
+            if user_input.lower() == "exit":
+                break
+            elif user_input.lower() == "status":
+                print_system("Agent is responsive and ready for commands.")
+                continue
+            
+            # Stream agent responses
+            async for chunk in agent_executor.astream(
+                {"messages": [HumanMessage(content=user_input)]},
+                runnable_config
+            ):
+                if "agent" in chunk:
+                    response = chunk["agent"]["messages"][0].content
+                    print_ai(format_ai_message_content(response))
+                elif "tools" in chunk:
+                    print_system(chunk["tools"]["messages"][0].content)
+                    
+        except KeyboardInterrupt:
+            print_system("\nExiting chat mode...")
+            break
+```
+
+## Character Configuration
+
+Agents use JSON character files to define personality and behavior:
+
+```json characters/template.json
+{
+  "name": "your name",
+  "accountid": "123456789",
+  "modelProvider": "anthropic",
+  "bio": [
+    "Core contributor at hadron founders club",
+    "Advisor to @0xPolygon",
+    "Angel investor focusing on strong product and engineering founders"
+  ],
+  "lore": [
+    "Believes that blockchains will change how financial systems work",
+    "Advocates for liquid and efficient private markets through tokenization"
+  ],
+  "knowledge": [
+    "Deep understanding of blockchain technology and its implications",
+    "Expertise in decentralized finance (DeFi) and its mechanisms"
+  ],
+  "adjectives": [
+    "funny",
+    "intelligent",
+    "academic",
+    "insightful"
+  ],
+  "topics": [
+    "defi",
+    "ethereum",
+    "zk_rollups",
+    "solana"
+  ],
+  "style": {
+    "all": [
+      "uses short punchy one-liners",
+      "favors concise, single-sentence responses",
+      "employs strategic brevity",
+      "maintains builder credibility while staying humble"
+    ]
+  }
+}
+```
+
+## Available Tools
+
+Chat agents have access to various tools configured via environment variables:
+
+<AccordionGroup>
+  <Accordion title="Blockchain Tools" icon="bitcoin">
+    - Wallet operations (send/receive crypto)
+    - Token deployment and trading
+    - ERC20 token interactions
+    - WETH wrapping/unwrapping
+    - Pyth price feed queries
+  </Accordion>
+  
+  <Accordion title="Social Media Tools" icon="twitter">
+    - Post tweets
+    - Reply to mentions
+    - Search and retweet
+    - User profile lookups
+    - Tweet deletion
+  </Accordion>
+  
+  <Accordion title="Knowledge Bases" icon="book">
+    - Twitter knowledge base (RAG over KOL tweets)
+    - Podcast knowledge base (RAG over transcripts)
+    - Query semantic search
+  </Accordion>
+  
+  <Accordion title="Utility Tools" icon="wrench">
+    - Web search (DuckDuckGo)
+    - Browser automation
+    - HTTP requests
+    - Writing/content generation
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+Set up your chat agent with environment variables:
+
+```bash .env
+# LLM Provider (Required)
+ANTHROPIC_API_KEY=your_anthropic_api_key
+
+# Character Configuration
+CHARACTER_FILE=characters/default.json
+
+# Knowledge Bases
+USE_TWITTER_KNOWLEDGE_BASE=false
+USE_PODCAST_KNOWLEDGE_BASE=true
+
+# Tool Toggles
+USE_COINBASE_TOOLS=true
+USE_HYPERBOLIC_TOOLS=true
+USE_BROWSER_TOOLS=true
+USE_WEB_SEARCH=true
+USE_WRITING_AGENT=true
+
+# Twitter Integration (Optional)
+USE_TWITTER_CORE=true
+TWITTER_API_KEY=your_twitter_api_key
+TWITTER_API_SECRET=your_twitter_api_secret
+```
+
+## Usage
+
+Start a chat session:
+
+```bash Terminal
+python chatbot.py
+```
+
+Select mode when prompted:
+
+```
+Available modes:
+1. Interactive chat mode
+2. Character Twitter Automation
+
+Choose a mode (enter number): 1
+```
+
+### Example Interaction
+
+```
+User: What's the latest in DeFi?
+
+Agent: Let me search for recent DeFi developments...
+
+[Tool: web_search]
+Query: latest DeFi developments 2026
+
+[Agent Response]
+Three major trends: 1) Real-world asset tokenization is accelerating 
+with TradFi integration, 2) ZK-rollups are achieving 100x cost reductions, 
+3) Liquid staking derivatives now represent 40% of ETH staking. The rails 
+are being built. Few understand this.
+
+User: Can you query the podcast knowledge base about rollups?
+
+Agent: [Tool: query_podcast_knowledge_base]
+
+According to our podcast episode with Vitalik, ZK-rollups offer the best 
+scalability-security tradeoff. Quote: "We're seeing 10,000+ TPS with full 
+Ethereum security guarantees." The tech is here, adoption follows.
+```
+
+## Advanced Features
+
+### Progress Indicators
+
+The agent shows a spinner while processing:
+
+```python chatbot.py
+async def run_with_progress(func, *args, **kwargs):
+    progress = ProgressIndicator()
+    
+    try:
+        generator = func(*args, **kwargs)
+        
+        async for chunk in generator:
+            progress.stop()  # Stop spinner before output
+            yield chunk
+            progress.start()  # Restart spinner while waiting
+    finally:
+        progress.stop()
+```
+
+### Memory Persistence
+
+Conversations are stored with LangGraph checkpointing:
+
+```python chatbot.py
+# Each agent has a unique thread ID for conversation history
+config = {
+    "configurable": {
+        "thread_id": f"{character['name']} Agent",
+        "checkpoint_id": str(uuid.uuid4())
+    }
+}
+
+# Memory is persisted across messages in the same session
+memory = MemorySaver()
+agent = create_react_agent(llm, tools=tools, checkpointer=memory)
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Character Design" icon="user">
+    - Define clear personality traits
+    - Include relevant domain knowledge
+    - Add style guidelines for consistency
+    - Use post examples to guide tone
+  </Card>
+  
+  <Card title="Tool Selection" icon="toolbox">
+    - Only enable needed tools
+    - Configure API keys securely
+    - Test tools independently first
+    - Monitor tool usage patterns
+  </Card>
+  
+  <Card title="Knowledge Bases" icon="database">
+    - Keep embeddings updated
+    - Use relevant query strategies
+    - Combine multiple sources
+    - Monitor retrieval quality
+  </Card>
+  
+  <Card title="Performance" icon="gauge">
+    - Use streaming for responsiveness
+    - Set reasonable recursion limits
+    - Handle errors gracefully
+    - Cache common queries
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Agent not responding">
+    Check that all required API keys are set:
+    - `ANTHROPIC_API_KEY` for Claude
+    - `CDP_API_KEY_NAME` and `CDP_API_KEY_PRIVATE` for blockchain
+    - Tool-specific keys if enabled
+  </Accordion>
+  
+  <Accordion title="Character file not loading">
+    Verify the character JSON file:
+    - File exists at the specified path
+    - JSON is valid (no syntax errors)
+    - Required fields are present (name, bio, style)
+  </Accordion>
+  
+  <Accordion title="Tool errors">
+    - Ensure tool dependencies are installed
+    - Verify API credentials for external services
+    - Check `ALLOW_DANGEROUS_REQUEST=true` for HTTP tools
+    - Review tool-specific environment variables
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Voice Agent" icon="microphone" href="/agents/voice-agent">
+    Add real-time voice interaction to your agent
+  </Card>
+  
+  <Card title="Twitter Automation" icon="robot" href="/agents/twitter-automation">
+    Deploy autonomous social media agents
+  </Card>
+  
+  <Card title="Tool Development" icon="code" href="/concepts/tools">
+    Create custom tools for your agent
+  </Card>
+  
+  <Card title="Voice Agent" icon="microphone" href="/agents/voice-agent">
+    Explore the voice-enabled agent interface
+  </Card>
+</CardGroup>

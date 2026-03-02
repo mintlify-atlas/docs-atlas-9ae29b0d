@@ -1,0 +1,96 @@
+---
+title: "Get Available GPUs"
+description: "Retrieve all available GPU machines on the Hyperbolic platform"
+---
+
+## Overview
+
+The `get_available_gpus` action retrieves all available GPU machines on the Hyperbolic platform, including pricing, specifications, and availability information.
+
+## Function Signature
+
+```python
+def get_available_gpus() -> str
+```
+
+## Input Schema
+
+This action takes no input parameters.
+
+## Response
+
+Returns a formatted string with details about available GPU options.
+
+<ResponseField name="output" type="string">
+  A formatted string containing:
+  - Cluster name
+  - Node ID
+  - GPU model
+  - Available GPUs (available/total)
+  - Price per GPU per hour in USD
+</ResponseField>
+
+## API Endpoint
+
+```
+POST https://api.hyperbolic.xyz/v1/marketplace
+```
+
+## Example Response
+
+```
+Available GPU Options:
+
+Cluster: us-east-1
+Node ID: node-abc123
+GPU Model: NVIDIA H100
+Available GPUs: 4/8
+Price: $2.50/hour per GPU
+----------------------------------------
+
+Cluster: us-west-2
+Node ID: node-def456
+GPU Model: NVIDIA A100
+Available GPUs: 2/4
+Price: $1.75/hour per GPU
+----------------------------------------
+```
+
+## Example Usage
+
+```python
+from hyperbolic_agentkit_core.actions import get_available_gpus
+
+# Get all available GPU options
+available_gpus = get_available_gpus()
+print(available_gpus)
+```
+
+## Important Notes
+
+- Authorization key (`HYPERBOLIC_API_KEY`) is required for this operation
+- GPU prices are returned in **dollars per hour** (converted from cents)
+- Only non-reserved instances with available GPUs are displayed
+- If no GPU instances are available, returns: "No available GPU instances found."
+- Use the cluster_name and node_name from this response when calling `rent_compute`
+
+## Response Details
+
+The function processes the marketplace API response and filters for:
+
+- Non-reserved instances (`reserved: false`)
+- Instances with available GPUs (`gpus_available > 0`)
+- Instances with valid hardware specifications
+
+For each matching instance, the response includes:
+
+- **Cluster**: Geographic or logical cluster identifier
+- **Node ID**: Unique node identifier for use in `rent_compute`
+- **GPU Model**: Hardware model (e.g., NVIDIA H100, A100, etc.)
+- **Available GPUs**: Number of GPUs available out of total
+- **Price**: Cost per GPU per hour in USD
+
+## Related Actions
+
+- [Rent Compute](/api/hyperbolic/rent-compute) - Rent GPUs from available nodes
+- [Get GPU Status](/api/hyperbolic/get-gpu-status) - Check status of your rented instances

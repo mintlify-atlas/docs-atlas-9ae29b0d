@@ -1,0 +1,340 @@
+---
+title: Writing Agent
+description: Autonomous AI writing tool with web research, style mimicry, and content generation capabilities
+---
+
+## Overview
+
+The Writing Agent is a powerful autonomous content creation tool that combines web research, document analysis, and AI-powered writing. It can research topics, analyze writing styles from reference documents, and generate high-quality articles with proper citations.
+
+## Features
+
+- **Autonomous Web Research**: Automatically searches and gathers information from the web using Tavily API
+- **Style Mimicry**: Analyzes reference documents and replicates their writing style, tone, and structure
+- **Citation Management**: Properly attributes sources and generates references
+- **Configurable Length**: Control target word count for generated content
+- **Multi-format Support**: Processes PDFs, text files, and image documents as style references
+
+## Installation
+
+The Writing Agent requires several API keys:
+
+```bash
+export ANTHROPIC_API_KEY="your-anthropic-key"
+export TAVILY_API_KEY="your-tavily-key"
+```
+
+<Note>
+The Writing Agent uses Claude 3.5 Sonnet for content generation and Tavily for web search.
+</Note>
+
+## Basic Usage
+
+### As a LangChain Tool
+
+```python
+from writing_agent import WritingTool
+
+# Initialize the tool
+writing_tool = WritingTool()
+
+# Generate content
+result = writing_tool._run(
+    query="Write an article about quantum computing",
+    target_length=1500,
+    output_file="quantum_article.txt"
+)
+
+print(result)
+```
+
+### With Reference Documents
+
+```python
+# Create content with style mimicry
+result = writing_tool._run(
+    query="Write a technical blog post about machine learning",
+    reference_files=[
+        "examples/blog_post_1.pdf",
+        "examples/blog_post_2.txt"
+    ],
+    target_length=2000
+)
+```
+
+## Architecture
+
+The Writing Agent consists of four main components:
+
+### 1. WritingAgent Class
+
+The main orchestrator that coordinates research and content generation:
+
+```python writing_agent/writing_agent.py
+class WritingAgent:
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self.searcher = WebSearcher()
+        self.document_sender = DocumentSender(api_key=self.api_key)
+        self.llm = ChatAnthropic(
+            model="claude-3-5-sonnet-20240620",
+            temperature=0.7,
+            anthropic_api_key=self.api_key
+        )
+```
+
+### 2. WebSearcher Class
+
+Handles web research using the Tavily API:
+
+```python writing_agent/web_searcher.py
+class WebSearcher:
+    async def search(self, query: str, num_results: int = 5) -> List[Dict[str, Any]]:
+        """Perform a web search and return structured results."""
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.tavily.com/search",
+                json={
+                    "query": query,
+                    "max_results": num_results,
+                    "api_key": self.api_key
+                }
+            ) as response:
+                data = await response.json()
+                return data.get("results", [])
+```
+
+### 3. DocumentSender Class
+
+Processes reference documents and sends them to Claude for style analysis:
+
+```python writing_agent/document_sender.py
+class DocumentSender:
+    def extract_text_from_pdf(self, pdf_path: str) -> str:
+        """Extract and normalize text from PDF files."""
+        text = ""
+        with open(pdf_path, 'rb') as file:
+            reader = pypdf.PdfReader(file)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                text += ' '.join(page_text.split())
+        return text
+    
+    async def send_query_with_documents(
+        self,
+        query: str,
+        file_paths: List[str],
+        max_tokens: int = 4096
+    ) -> Optional[str]:
+        """Send query with reference documents for style mimicry."""
+```
+
+### 4. WritingTool Class
+
+LangChain-compatible tool wrapper:
+
+```python writing_agent/writing_tool.py
+class WritingTool(BaseTool):
+    name: str = "writing_agent"
+    args_schema: type[BaseModel] = WritingInput
+    
+    async def _arun(
+        self,
+        query: str,
+        reference_files: Optional[List[str]] = None,
+        target_length: Optional[int] = 1500,
+        output_file: Optional[str] = None
+    ) -> str:
+        agent = WritingAgent(api_key=self.api_key)
+        await agent.load_reference_materials(reference_files)
+        result = await agent.create_content(query, target_length, output_file)
+        return result
+```
+
+## Content Generation Workflow
+
+<Steps>
+  <Step title="Research Phase">
+    The agent searches the web for relevant information about the topic using Tavily API, gathering up to 10 sources.
+  </Step>
+  
+  <Step title="Style Analysis">
+    If reference documents are provided, the DocumentSender extracts their content and analyzes writing patterns, sentence structure, and tone.
+  </Step>
+  
+  <Step title="Prompt Construction">
+    Creates a detailed prompt combining research findings, style guidelines, and content requirements.
+  </Step>
+  
+  <Step title="Content Generation">
+    Sends the prompt to Claude 3.5 Sonnet, which generates content matching the specified style and incorporating research.
+  </Step>
+  
+  <Step title="Post-processing">
+    Formats the output, adds citations, counts words, and optionally saves to a file.
+  </Step>
+</Steps>
+
+## Advanced Configuration
+
+### Reference Documents Directory
+
+By default, the agent looks for reference documents in a `reference_docs/` directory:
+
+```python
+REFERENCE_DOCS_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "reference_docs"
+)
+```
+
+Place your style reference documents here, and they'll be automatically loaded:
+
+```bash
+writing_agent/
+├── reference_docs/
+│   ├── blog_style_1.pdf
+│   ├── blog_style_2.txt
+│   └── technical_writing_sample.pdf
+```
+
+### Custom Model Configuration
+
+```python
+from langchain_anthropic import ChatAnthropic
+from writing_agent import WritingAgent
+
+agent = WritingAgent()
+agent.llm = ChatAnthropic(
+    model="claude-3-opus-20240229",  # Use a different model
+    temperature=0.9,  # More creative output
+    max_tokens=8192   # Longer responses
+)
+```
+
+### Handling Different File Types
+
+The DocumentSender supports multiple formats:
+
+- **PDFs**: Text extraction with pypdf
+- **Text files**: Direct reading with UTF-8 encoding
+- **Images**: Base64 encoding for vision models
+
+```python
+# Example with mixed file types
+reference_files = [
+    "style_guide.pdf",
+    "example_article.txt",
+    "infographic.png"  # Claude can analyze visual styles
+]
+```
+
+## Input Schema
+
+<ParamField path="query" type="string" required>
+  The topic or request for content creation. Be specific about what you want written.
+</ParamField>
+
+<ParamField path="reference_files" type="List[str]">
+  Optional list of file paths to reference documents for style analysis.
+</ParamField>
+
+<ParamField path="target_length" type="int" default="1500">
+  Target length of the article in words.
+</ParamField>
+
+<ParamField path="output_file" type="str">
+  Optional path to save the generated content as a text file.
+</ParamField>
+
+## Output Format
+
+The tool returns a structured string containing:
+
+```python
+{
+    "content": "The generated article text...",
+    "word_count": 1547,
+    "sources": [
+        "https://example.com/article1",
+        "https://example.com/article2"
+    ]
+}
+```
+
+## Example: Complete Workflow
+
+```python
+import asyncio
+from writing_agent import WritingAgent
+
+async def create_blog_post():
+    # Initialize agent
+    agent = WritingAgent()
+    
+    # Load reference materials from default directory
+    await agent.load_reference_materials()
+    
+    # Research and create content
+    result = await agent.create_content(
+        topic="The Future of Artificial Intelligence in Healthcare",
+        target_length=2000,
+        output_file="healthcare_ai_article.txt"
+    )
+    
+    print(f"Generated {result['word_count']} words")
+    print(f"Used {len(result['sources'])} sources")
+    print(f"\nFirst 200 characters:\n{result['content'][:200]}...")
+
+# Run the async function
+asyncio.run(create_blog_post())
+```
+
+## Error Handling
+
+The Writing Agent includes comprehensive error handling:
+
+```python
+try:
+    result = await agent.create_content(topic, target_length)
+except Exception as e:
+    logger.error(f"Error creating content: {str(e)}")
+    return {
+        "content": f"Error occurred during content creation: {str(e)}",
+        "word_count": 0,
+        "sources": []
+    }
+```
+
+<Warning>
+Ensure your API keys are set before using the Writing Agent. Missing keys will result in warnings and limited functionality.
+</Warning>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Style Consistency" icon="brush">
+    Use 2-3 reference documents from the same author or publication for best style mimicry results.
+  </Card>
+  
+  <Card title="Research Quality" icon="magnifying-glass">
+    Be specific in your query to get more targeted and relevant web research results.
+  </Card>
+  
+  <Card title="Length Targets" icon="ruler">
+    Set realistic word counts. The agent aims for your target but prioritizes content quality.
+  </Card>
+  
+  <Card title="Source Verification" icon="check">
+    Always review the generated sources list to ensure citation accuracy.
+  </Card>
+</CardGroup>
+
+## Source Code Reference
+
+Key files in the writing_agent module:
+
+- `writing_tool.py:31-129` - Main tool implementation
+- `writing_agent.py:12-261` - Core agent logic
+- `web_searcher.py:14-69` - Web search functionality
+- `document_sender.py:10-329` - Document processing and style mimicry

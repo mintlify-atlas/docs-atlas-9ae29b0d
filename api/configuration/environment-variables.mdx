@@ -1,0 +1,293 @@
+---
+title: "Environment Variables"
+description: "Required and optional environment variables for Hyperbolic AgentKit"
+---
+
+## Overview
+
+The Hyperbolic AgentKit uses environment variables to configure API keys, feature flags, and system settings. Variables are loaded from a `.env` file in the project root.
+
+## Setup
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your actual API keys and configuration.
+
+## Required Variables
+
+### Core APIs
+
+<ParamField path="ANTHROPIC_API_KEY" type="string" required>
+  Anthropic API key for Claude LLM. Get from [Anthropic Console](https://console.anthropic.com/dashboard).
+</ParamField>
+
+<ParamField path="CDP_API_KEY_NAME" type="string" required>
+  Coinbase Developer Platform API key name. Get from [CDP Portal](https://portal.cdp.coinbase.com/access/api).
+</ParamField>
+
+<ParamField path="CDP_API_KEY_PRIVATE" type="string" required>
+  Coinbase Developer Platform private key.
+</ParamField>
+
+<ParamField path="HYPERBOLIC_API_KEY" type="string" required>
+  Hyperbolic API key for GPU compute tools. Get from [Hyperbolic Settings](https://app.hyperbolic.xyz/settings).
+</ParamField>
+
+### OpenAI (Required for Voice Agent)
+
+<ParamField path="OPENAI_API_KEY" type="string">
+  OpenAI API key. Required only if using the voice agent interface. Get from [OpenAI Portal](https://platform.openai.com/api-keys).
+</ParamField>
+
+## Optional Integration APIs
+
+### Twitter/X Integration
+
+<ParamField path="TWITTER_ACCESS_TOKEN" type="string">
+  Twitter OAuth access token.
+</ParamField>
+
+<ParamField path="TWITTER_API_KEY" type="string">
+  Twitter API key (Consumer Key).
+</ParamField>
+
+<ParamField path="TWITTER_API_SECRET" type="string">
+  Twitter API secret (Consumer Secret).
+</ParamField>
+
+<ParamField path="TWITTER_ACCESS_TOKEN_SECRET" type="string">
+  Twitter OAuth access token secret.
+</ParamField>
+
+<ParamField path="TWITTER_BEARER_TOKEN" type="string">
+  Twitter Bearer Token for API v2.
+</ParamField>
+
+<ParamField path="TWITTER_CLIENT_ID" type="string">
+  Twitter OAuth 2.0 Client ID.
+</ParamField>
+
+<ParamField path="TWITTER_CLIENT_SECRET" type="string">
+  Twitter OAuth 2.0 Client Secret.
+</ParamField>
+
+Get Twitter credentials from [Twitter Developer Portal](https://developer.twitter.com).
+
+### Web Search
+
+<ParamField path="TAVILY_API_KEY" type="string">
+  Tavily API key for web search tool and Writing Agent. Get from [Tavily](https://tavily.com).
+</ParamField>
+
+### LangChain Tracing
+
+<ParamField path="LANGCHAIN_TRACING_V2" type="boolean" default="true">
+  Enable LangChain tracing for debugging.
+</ParamField>
+
+<ParamField path="LANGCHAIN_ENDPOINT" type="string">
+  LangChain API endpoint URL.
+</ParamField>
+
+<ParamField path="LANGCHAIN_API_KEY" type="string">
+  LangChain API key.
+</ParamField>
+
+<ParamField path="LANGCHAIN_PROJECT" type="string">
+  LangChain project name.
+</ParamField>
+
+## Configuration Variables
+
+### SSH Configuration
+
+<ParamField path="SSH_PRIVATE_KEY_PATH" type="string" default="~/.ssh/id_rsa">
+  Path to SSH private key for GPU instance access. **Must be an RSA key** (ed25519 not supported).
+  
+  Generate an RSA key:
+  ```bash
+  ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+  ```
+  
+  Add public key to [Hyperbolic Settings](https://app.hyperbolic.xyz/settings).
+</ParamField>
+
+### Character Configuration
+
+<ParamField path="CHARACTER_FILE" type="string" default="characters/default.json">
+  Path to character configuration JSON file. Can be comma-separated for multiple characters.
+</ParamField>
+
+### Knowledge Base Configuration
+
+<ParamField path="USE_TWITTER_KNOWLEDGE_BASE" type="boolean" default="false">
+  Enable Twitter knowledge base for scraping KOL tweets. At least one knowledge base (Twitter or Podcast) must be enabled.
+</ParamField>
+
+<ParamField path="USE_PODCAST_KNOWLEDGE_BASE" type="boolean" default="true">
+  Enable Podcast knowledge base for transcript processing.
+</ParamField>
+
+### Security Settings
+
+<ParamField path="ALLOW_DANGEROUS_REQUEST" type="boolean" default="true">
+  Allow HTTP request tools. **Must be true** to use request tools. Set to false in production for security.
+</ParamField>
+
+## Feature Flags
+
+### Core Toolkits
+
+<ParamField path="USE_COINBASE_TOOLS" type="boolean" default="true">
+  Enable Coinbase CDP tools for blockchain operations.
+</ParamField>
+
+<ParamField path="USE_HYPERBOLIC_TOOLS" type="boolean" default="true">
+  Enable Hyperbolic GPU compute tools.
+</ParamField>
+
+<ParamField path="USE_TWITTER_CORE" type="boolean" default="true">
+  Enable core Twitter API integration.
+</ParamField>
+
+<ParamField path="USE_BROWSER_TOOLS" type="boolean" default="true">
+  Enable browser automation tools (Playwright). **Recommended for maximum agent functionality.**
+</ParamField>
+
+### Twitter Tools
+
+<ParamField path="USE_TWEET_REPLY_TRACKING" type="boolean" default="true">
+  Enable tracking of replied tweets to avoid duplicates.
+</ParamField>
+
+<ParamField path="USE_TWEET_REPOST_TRACKING" type="boolean" default="true">
+  Enable tracking of reposted tweets.
+</ParamField>
+
+<ParamField path="USE_TWEET_DELETE" type="boolean" default="true">
+  Enable tweet deletion capability.
+</ParamField>
+
+<ParamField path="USE_USER_ID_LOOKUP" type="boolean" default="true">
+  Enable Twitter user ID lookup by username.
+</ParamField>
+
+<ParamField path="USE_USER_TWEETS_LOOKUP" type="boolean" default="true">
+  Enable retrieving user's recent tweets.
+</ParamField>
+
+<ParamField path="USE_RETWEET" type="boolean" default="true">
+  Enable retweet functionality.
+</ParamField>
+
+### Additional Tools
+
+<ParamField path="USE_DEPLOY_MULTITOKEN" type="boolean" default="true">
+  Enable multi-token deployment tools.
+</ParamField>
+
+<ParamField path="USE_WEB_SEARCH" type="boolean" default="true">
+  Enable web search via DuckDuckGo.
+</ParamField>
+
+<ParamField path="USE_REQUEST_TOOLS" type="boolean" default="true">
+  Enable HTTP request tools. Requires `ALLOW_DANGEROUS_REQUEST=true`.
+</ParamField>
+
+<ParamField path="USE_WRITING_AGENT" type="boolean" default="true">
+  Enable Writing Agent for content generation.
+</ParamField>
+
+<ParamField path="USE_GITHUB_TOOLS" type="boolean" default="true">
+  Enable GitHub API tools. Requires `GITHUB_TOKEN`.
+</ParamField>
+
+## Example .env File
+
+```bash
+# Core APIs (Required)
+ANTHROPIC_API_KEY=sk-ant-...
+CDP_API_KEY_NAME=organizations/.../apiKeys/...
+CDP_API_KEY_PRIVATE=-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----\n
+HYPERBOLIC_API_KEY=hb_...
+
+# OpenAI (Required for voice agent)
+OPENAI_API_KEY=sk-...
+
+# Twitter Integration (Optional)
+TWITTER_ACCESS_TOKEN=...
+TWITTER_API_KEY=...
+TWITTER_API_SECRET=...
+TWITTER_ACCESS_TOKEN_SECRET=...
+TWITTER_BEARER_TOKEN=...
+TWITTER_CLIENT_ID=...
+TWITTER_CLIENT_SECRET=...
+
+# Web Search
+TAVILY_API_KEY=tvly-...
+
+# SSH Configuration
+SSH_PRIVATE_KEY_PATH=~/.ssh/id_rsa
+
+# LangChain Configuration
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+LANGCHAIN_API_KEY=...
+LANGCHAIN_PROJECT=hyperbolic-agent
+
+# Character Configuration
+CHARACTER_FILE=characters/default.json
+
+# Knowledge Base Configuration
+USE_TWITTER_KNOWLEDGE_BASE=false
+USE_PODCAST_KNOWLEDGE_BASE=true
+
+# Security Settings
+ALLOW_DANGEROUS_REQUEST=true
+
+# Core Toolkits
+USE_COINBASE_TOOLS=true
+USE_HYPERBOLIC_TOOLS=true
+USE_TWITTER_CORE=true
+USE_BROWSER_TOOLS=true
+
+# Twitter Tools
+USE_TWEET_REPLY_TRACKING=true
+USE_TWEET_REPOST_TRACKING=true
+USE_TWEET_DELETE=true
+USE_USER_ID_LOOKUP=true
+USE_USER_TWEETS_LOOKUP=true
+USE_RETWEET=true
+
+# Additional Tools
+USE_DEPLOY_MULTITOKEN=true
+USE_WEB_SEARCH=true
+USE_REQUEST_TOOLS=true
+USE_WRITING_AGENT=true
+```
+
+## Security Best Practices
+
+1. **Never commit `.env` to version control**
+   - Add `.env` to `.gitignore`
+   - Use `.env.example` as a template (without actual keys)
+
+2. **Restrict file permissions**
+   ```bash
+   chmod 600 .env
+   ```
+
+3. **Use different keys for development and production**
+
+4. **Rotate API keys regularly**
+
+5. **Set `ALLOW_DANGEROUS_REQUEST=false` in production** if request tools aren't needed
+
+## Related Documentation
+
+- [Agent Initialization](/api/configuration/agent-initialization) - How environment variables are used
+- [Character Schema](/api/configuration/character-schema) - CHARACTER_FILE format

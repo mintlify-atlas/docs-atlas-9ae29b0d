@@ -1,0 +1,423 @@
+---
+title: Architecture
+description: Understanding the Hyperbolic AgentKit framework architecture and how components work together
+---
+
+## Overview
+
+Hyperbolic AgentKit is built on a modular architecture that combines LangChain's agent orchestration, LangGraph's state management, and specialized action providers for GPU compute, blockchain, social media, and content generation.
+
+## Core Architecture
+
+The framework follows a layered architecture:
+
+```
+┌─────────────────────────────────────────┐
+│         Agent Interfaces                │
+│  (chatbot.py, gradio_ui.py, voice)     │
+└─────────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────┐
+│      LangGraph ReAct Agent              │
+│   (create_react_agent)                  │
+└─────────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────┐
+│         Tool Orchestration              │
+│  (hyperbolic_langchain, toolkits)      │
+└─────────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────┐
+│          Action Providers               │
+│  (Core Actions, CDP, Twitter, etc.)     │
+└─────────────────────────────────────────┘
+```
+
+## Key Components
+
+### 1. LangGraph Integration
+
+The framework uses LangGraph's `create_react_agent` for agent orchestration:
+
+```python chatbot.py
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import create_react_agent
+
+# Initialize memory for conversation state
+memory = MemorySaver()
+
+# Create ReAct agent with tools and checkpointing
+agent = create_react_agent(
+    llm,
+    tools=tools,
+    checkpointer=memory,
+    state_modifier=personality,
+)
+```
+
+**Key Features:**
+- **State Management**: Maintains conversation context across interactions
+- **Checkpointing**: Saves agent state for resumable conversations
+- **ReAct Pattern**: Reasoning and Acting loop for tool execution
+
+### 2. Hyperbolic Core Module
+
+The `hyperbolic_agentkit_core` module provides GPU compute actions:
+
+```python hyperbolic_agentkit_core/actions/__init__.py
+from hyperbolic_agentkit_core.actions.hyperbolic_action import HyperbolicAction
+from hyperbolic_agentkit_core.actions.rent_compute import RentComputeAction
+from hyperbolic_agentkit_core.actions.get_available_gpus import GetAvailableGpusAction
+
+def get_all_hyperbolic_actions() -> list[type[HyperbolicAction]]:
+    """Retrieve all subclasses of HyperbolicAction."""
+    actions = []
+    for action in HyperbolicAction.__subclasses__():
+        actions.append(action())
+    return actions
+
+HYPERBOLIC_ACTIONS = get_all_hyperbolic_actions()
+```
+
+**Available Actions:**
+- `rent_compute` - Rent GPU instances
+- `get_available_gpus` - Query available GPUs
+- `terminate_compute` - Terminate GPU instances
+- `get_gpu_status` - Check status of rented GPUs
+- `ssh_connect` - Connect to GPU instances via SSH
+- `remote_shell` - Execute commands on remote GPUs
+- `get_spend_history` - Query billing history
+- `get_current_balance` - Check account balance
+- `link_wallet_address` - Link Ethereum wallet for payments
+
+### 3. LangChain Wrapper
+
+The `hyperbolic_langchain` module wraps core actions for LangChain compatibility:
+
+```python hyperbolic_langchain/utils/hyperbolic_agentkit_wrapper.py
+from langchain_core.utils import get_from_dict_or_env
+from pydantic import BaseModel, model_validator
+
+class HyperbolicAgentkitWrapper(BaseModel):
+    """Wrapper for Hyperbolic Agentkit Core."""
+
+    hyperbolic_api_key: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_environment(cls, values: dict) -> Any:
+        """Validate that Hyperbolic API Key exists."""
+        hyperbolic_api_key = get_from_dict_or_env(
+            values, "hyperbolic_api_key", "HYPERBOLIC_API_KEY"
+        )
+        values["hyperbolic_api_key"] = hyperbolic_api_key
+        return values
+
+    def run_action(self, func: Callable[..., str], **kwargs) -> str:
+        """Run a Hyperbolic Action."""
+        return func(**kwargs)
+```
+
+### 4. Toolkit System
+
+Tools are organized into toolkits for easy registration:
+
+```python hyperbolic_langchain/agent_toolkits/hyperbolic_toolkit.py
+from langchain_core.tools.base import BaseToolkit
+from hyperbolic_agentkit_core.actions import HYPERBOLIC_ACTIONS
+from hyperbolic_langchain.tools import HyperbolicTool
+
+class HyperbolicToolkit(BaseToolkit):
+    """Hyperbolic Platform Toolkit."""
+
+    @classmethod
+    def from_hyperbolic_agentkit_wrapper(
+        cls, hyperbolic_agentkit_wrapper: HyperbolicAgentkitWrapper
+    ) -> "HyperbolicToolkit":
+        actions = HYPERBOLIC_ACTIONS
+        
+        tools = [
+            HyperbolicTool(
+                name=action.name,
+                description=action.description,
+                hyperbolic_agentkit_wrapper=hyperbolic_agentkit_wrapper,
+                args_schema=action.args_schema,
+                func=action.func,
+            ) for action in actions
+        ]
+        
+        return cls(tools=tools)
+```
+
+## Agent Initialization Flow
+
+The agent initialization follows a structured process defined in `chatbot.py:initialize_agent()`:
+
+### 1. Character Loading
+
+```python chatbot.py
+def loadCharacters(charactersArg: str) -> List[Dict[str, Any]]:
+    """Load character files and return their configurations."""
+    characterPaths = charactersArg.split(",") if charactersArg else []
+    loadedCharacters = []
+    
+    if not characterPaths:
+        # Load default character
+        default_path = os.path.join(os.path.dirname(__file__), 
+                                   "characters/default.json")
+        characterPaths.append(default_path)
+    
+    for characterPath in characterPaths:
+        with open(characterPath, 'r', encoding='utf-8') as f:
+            character = json.load(f)
+            loadedCharacters.append(character)
+    
+    return loadedCharacters
+```
+
+### 2. Personality Processing
+
+```python chatbot.py
+def process_character_config(character: Dict[str, Any]) -> str:
+    """Process character configuration into agent personality."""
+    bio = "\n".join([f"- {item}" for item in character.get('bio', [])])
+    lore = "\n".join([f"- {item}" for item in character.get('lore', [])])
+    knowledge = "\n".join([f"- {item}" for item in character.get('knowledge', [])])
+    
+    personality = f"""
+    You are an AI character with this configuration:
+    
+    <character_bio>
+    {bio}
+    </character_bio>
+    
+    <character_lore>
+    {lore}
+    </character_lore>
+    
+    <character_knowledge>
+    {knowledge}
+    </character_knowledge>
+    """
+    return personality
+```
+
+### 3. Tool Registration
+
+```python chatbot.py
+def create_agent_tools(llm, knowledge_base, podcast_knowledge_base, 
+                       agent_kit, config):
+    """Create and return a list of tools for the agent to use."""
+    tools = []
+    
+    # Add Hyperbolic tools
+    if os.getenv("USE_HYPERBOLIC_TOOLS", "false").lower() == "true":
+        hyperbolic_agentkit = HyperbolicAgentkitWrapper()
+        hyperbolic_toolkit = HyperbolicToolkit.from_hyperbolic_agentkit_wrapper(
+            hyperbolic_agentkit
+        )
+        tools.extend(hyperbolic_toolkit.get_tools())
+    
+    # Add Coinbase AgentKit tools
+    if os.getenv("USE_COINBASE_TOOLS", "true").lower() == "true":
+        coinbase_tools = get_langchain_tools(agent_kit)
+        tools.extend(coinbase_tools)
+    
+    # Add browser tools
+    if os.getenv("USE_BROWSER_TOOLS", "true").lower() == "true":
+        browser_toolkit = BrowserToolkit.from_llm(llm)
+        tools.extend(browser_toolkit.get_tools())
+    
+    return tools
+```
+
+### 4. Agent Creation
+
+```python chatbot.py
+async def initialize_agent():
+    """Initialize the agent with tools and configuration."""
+    # Initialize LLM
+    llm = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+    
+    # Load and process character
+    characters = loadCharacters(os.getenv("CHARACTER_FILE"))
+    character = characters[0]
+    personality = process_character_config(character)
+    
+    # Create configuration
+    config = {
+        "configurable": {
+            "thread_id": f"{character['name']} Agent",
+            "character": character["name"],
+            "recursion_limit": 100,
+            "checkpoint_id": str(uuid.uuid4()),
+        },
+        "character": character
+    }
+    
+    # Initialize knowledge bases and tools
+    tools = create_agent_tools(llm, knowledge_base, 
+                              podcast_knowledge_base, agent_kit, config)
+    
+    # Create agent with memory
+    memory = MemorySaver()
+    return create_react_agent(
+        llm,
+        tools=tools,
+        checkpointer=memory,
+        state_modifier=personality,
+    ), config
+```
+
+## Action Provider System
+
+The framework uses a provider-based architecture for extensibility:
+
+### Base Action Class
+
+```python hyperbolic_agentkit_core/actions/hyperbolic_action.py
+from pydantic import BaseModel
+from collections.abc import Callable
+
+class HyperbolicAction(BaseModel):
+    """Hyperbolic Action Base Class."""
+    
+    name: str
+    description: str
+    args_schema: type[BaseModel] | None = None
+    func: Callable[..., str]
+```
+
+### Action Discovery
+
+Actions are automatically discovered through Python's subclass mechanism:
+
+```python hyperbolic_agentkit_core/actions/__init__.py
+def get_all_hyperbolic_actions() -> list[type[HyperbolicAction]]:
+    """Retrieve all subclasses of HyperbolicAction."""
+    actions = []
+    for action in HyperbolicAction.__subclasses__():
+        actions.append(action())
+    return actions
+```
+
+<Note>
+All new `HyperbolicAction` subclasses must be imported in `__init__.py` to be discovered by the framework.
+</Note>
+
+## State Management
+
+The framework maintains several types of state:
+
+### 1. Conversation State
+
+```python chatbot.py
+runnable_config = RunnableConfig(
+    recursion_limit=200,
+    configurable={
+        "thread_id": config["configurable"]["thread_id"],
+        "langgraph_checkpoint_ns": "chat_mode",
+        "langgraph_checkpoint_id": config["configurable"]["langgraph_checkpoint_id"]
+    }
+)
+```
+
+### 2. Twitter State
+
+Tracks Twitter interactions to prevent duplicates:
+
+```python chatbot.py
+from twitter_agent.twitter_state import TwitterState
+
+twitter_state = TwitterState()
+
+check_replied_tool = Tool(
+    name="has_replied_to",
+    func=twitter_state.has_replied_to,
+    description="Check if we've already replied to a tweet"
+)
+```
+
+### 3. Knowledge Base State
+
+Maintains embedded knowledge for context:
+
+```python chatbot.py
+knowledge_base = TweetKnowledgeBase()
+podcast_knowledge_base = PodcastKnowledgeBase()
+
+tools.append(Tool(
+    name="query_twitter_knowledge_base",
+    func=lambda query: knowledge_base.query_knowledge_base(query),
+    description="Query the Twitter knowledge base"
+))
+```
+
+## Multi-Interface Support
+
+The architecture supports multiple interfaces:
+
+### 1. Terminal Interface
+
+```python chatbot.py
+async def run_chat_mode(agent_executor, config, runnable_config):
+    """Run the agent interactively based on user input."""
+    while True:
+        user_input = input("User: ")
+        
+        async for chunk in agent_executor.astream(
+            {"messages": [HumanMessage(content=user_input)]},
+            runnable_config
+        ):
+            if "agent" in chunk:
+                response = chunk["agent"]["messages"][0].content
+                print_ai(response)
+```
+
+### 2. Gradio Web Interface
+
+Provided via `gradio_ui.py` for browser-based interaction.
+
+### 3. Voice Interface
+
+WebSocket-based voice agent in `server/src/server/app.py` using OpenAI's realtime API.
+
+## Environment-Based Configuration
+
+All components can be enabled/disabled via environment variables:
+
+```bash .env
+# Hyperbolic Tools
+USE_HYPERBOLIC_TOOLS=true
+HYPERBOLIC_API_KEY=your_api_key
+
+# Browser Tools
+USE_BROWSER_TOOLS=true
+
+# Twitter Tools
+USE_TWITTER_CORE=true
+USE_TWITTER_KNOWLEDGE_BASE=true
+
+# Coinbase Tools
+USE_COINBASE_TOOLS=true
+
+# Writing Agent
+USE_WRITING_AGENT=true
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    Learn about different agent types and modes
+  </Card>
+  <Card title="Tools" icon="wrench" href="/concepts/tools">
+    Explore the tool and action system
+  </Card>
+  <Card title="Character Configuration" icon="user" href="/concepts/character-configuration">
+    Configure agent personality and behavior
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get started building with AgentKit
+  </Card>
+</CardGroup>

@@ -1,0 +1,640 @@
+---
+title: Character Configuration
+description: Configure your agent's personality, communication style, and behavior using character files
+---
+
+## Overview
+
+Character configuration allows you to customize your agent's personality, communication style, knowledge, and behavior. Characters are defined in JSON files that the framework loads and processes into agent personalities.
+
+## Character File Structure
+
+Character files are JSON documents located in the `characters/` directory:
+
+```json characters/template.json
+{
+  "name": "your name",
+  "accountid": "123456789",
+  "plugins": [],
+  "clients": ["twitter"],
+  "modelProvider": "anthropic",
+  "settings": {
+    "secrets": {},
+    "voice": {
+      "model": "en_US-hfc_female-medium"
+    }
+  },
+  "system": "Roleplay and generate interesting content on behalf of user.",
+  "bio": [
+    "Core contributor at hadron founders club",
+    "Advisor to @0xPolygon",
+    "Angel investor focusing on strong product and engineering founders"
+  ],
+  "lore": [
+    "Believes that blockchains will change how financial systems work",
+    "Advocates for liquid and efficient private markets through tokenization",
+    "Supporter of Solana, Ethereum, Polygon, Avail, Eigenlayer and Hyperbolic"
+  ],
+  "knowledge": [
+    "Deep understanding of blockchain technology and its implications",
+    "Expertise in decentralized finance (DeFi) and its mechanisms",
+    "Awareness of current trends in AI and machine learning"
+  ],
+  "messageExamples": [
+    [
+      {
+        "user": "{{user1}}",
+        "content": {
+          "text": "hey can you help with me something"
+        }
+      },
+      {
+        "user": "your username",
+        "content": {
+          "text": "i'm kinda busy but i can probably step away for a minute, whatcha need"
+        }
+      }
+    ]
+  ],
+  "postExamples": [
+    "can have tens of thousands of posts in this section",
+    "you can also provide a twitter account and this can be automatically scraped"
+  ],
+  "adjectives": [
+    "funny",
+    "intelligent",
+    "academic",
+    "insightful"
+  ],
+  "kol_list": [
+    {
+      "username": "aixbt_agent",
+      "user_id": "1852674305517342720"
+    },
+    {
+      "username": "0xMert_",
+      "user_id": "1309886201944473600"
+    }
+  ],
+  "topics": [
+    "defi",
+    "nft",
+    "zk_rollups",
+    "ethereum",
+    "solana"
+  ],
+  "style": {
+    "all": [
+      "uses short punchy one-liners",
+      "favors concise, single-sentence responses",
+      "balances technical depth with accessible commentary",
+      "emphasizes building over speculation"
+    ]
+  }
+}
+```
+
+## Configuration Fields
+
+### Basic Information
+
+<ParamField path="name" type="string" required>
+  The agent's display name used in conversations and logs.
+</ParamField>
+
+<ParamField path="accountid" type="string">
+  Twitter/X account ID for social media integrations. Used for autonomous Twitter operations.
+</ParamField>
+
+<ParamField path="modelProvider" type="string" default="anthropic">
+  LLM provider to use. Options: `anthropic`, `openai`
+</ParamField>
+
+<ParamField path="clients" type="array">
+  Platforms the agent will interact with. Options: `twitter`, `discord`, `telegram`
+</ParamField>
+
+<ParamField path="system" type="string">
+  High-level system prompt that defines the agent's primary purpose.
+</ParamField>
+
+### Personality Configuration
+
+<ParamField path="bio" type="array" required>
+  List of biographical facts about the agent. These define the agent's identity and background.
+  
+  ```json
+  "bio": [
+    "Core contributor at hadron founders club",
+    "Advisor to @0xPolygon",
+    "Angel investor focusing on strong product and engineering founders"
+  ]
+  ```
+</ParamField>
+
+<ParamField path="lore" type="array" required>
+  Background story, beliefs, and values that inform the agent's worldview.
+  
+  ```json
+  "lore": [
+    "Believes that blockchains will change how financial systems work",
+    "Advocates for liquid and efficient private markets through tokenization",
+    "Envisions a world where DeFi solutions replace traditional banking"
+  ]
+  ```
+</ParamField>
+
+<ParamField path="knowledge" type="array" required>
+  Areas of expertise and knowledge domains the agent can draw upon.
+  
+  ```json
+  "knowledge": [
+    "Deep understanding of blockchain technology and its implications",
+    "Expertise in decentralized finance (DeFi) and its mechanisms",
+    "Awareness of current trends in AI and machine learning"
+  ]
+  ```
+</ParamField>
+
+<ParamField path="adjectives" type="array">
+  Personality traits that describe the agent's character.
+  
+  ```json
+  "adjectives": [
+    "funny",
+    "intelligent",
+    "academic",
+    "insightful"
+  ]
+  ```
+</ParamField>
+
+### Communication Style
+
+<ParamField path="style" type="object" required>
+  Defines how the agent communicates. The `all` key applies to all contexts.
+  
+  ```json
+  "style": {
+    "all": [
+      "uses short punchy one-liners",
+      "favors concise, single-sentence responses",
+      "balances technical depth with accessible commentary",
+      "emphasizes building over speculation",
+      "employs strategic brevity - keeps most posts under 45 chars",
+      "does not use emojis often, use one if is directly relevant"
+    ],
+    "chat": [
+      "more conversational and helpful",
+      "explains complex concepts clearly"
+    ],
+    "post": [
+      "extremely concise",
+      "optimized for engagement"
+    ]
+  }
+  ```
+</ParamField>
+
+<ParamField path="messageExamples" type="array">
+  Example conversations that demonstrate the agent's communication patterns.
+  
+  ```json
+  "messageExamples": [
+    [
+      {
+        "user": "{{user1}}",
+        "content": {
+          "text": "hey can you help with me something"
+        }
+      },
+      {
+        "user": "your username",
+        "content": {
+          "text": "i'm kinda busy but i can probably step away for a minute, whatcha need"
+        }
+      }
+    ]
+  ]
+  ```
+</ParamField>
+
+<ParamField path="postExamples" type="array">
+  Example posts/tweets that demonstrate the agent's writing style. Can include thousands of examples.
+  
+  ```json
+  "postExamples": [
+    "the future of finance is decentralized",
+    "building > talking",
+    "gm to all the builders out there"
+  ]
+  ```
+</ParamField>
+
+### Twitter Configuration
+
+<ParamField path="topics" type="array">
+  Topics the agent is interested in and will engage with on social media.
+  
+  ```json
+  "topics": [
+    "defi",
+    "nft",
+    "zk_rollups",
+    "ethereum",
+    "bitcoin",
+    "solana"
+  ]
+  ```
+</ParamField>
+
+<ParamField path="kol_list" type="array">
+  Key Opinion Leaders (KOLs) the agent will interact with in Twitter automation mode.
+  
+  ```json
+  "kol_list": [
+    {
+      "username": "aixbt_agent",
+      "user_id": "1852674305517342720"
+    },
+    {
+      "username": "0xMert_",
+      "user_id": "1309886201944473600"
+    },
+    {
+      "username": "jessepollak",
+      "user_id": "18876842"
+    }
+  ]
+  ```
+</ParamField>
+
+## Character Processing
+
+The framework processes character files through several steps:
+
+### 1. Character Loading
+
+```python chatbot.py
+def loadCharacters(charactersArg: str) -> List[Dict[str, Any]]:
+    """Load character files and return their configurations."""
+    characterPaths = charactersArg.split(",") if charactersArg else []
+    loadedCharacters = []
+    
+    if not characterPaths:
+        # Load default character
+        default_path = os.path.join(
+            os.path.dirname(__file__), 
+            "characters/default.json"
+        )
+        characterPaths.append(default_path)
+    
+    for characterPath in characterPaths:
+        # Search in common locations
+        searchPaths = [
+            characterPath,
+            os.path.join("characters", characterPath),
+            os.path.join(os.path.dirname(__file__), "characters", characterPath)
+        ]
+        
+        for path in searchPaths:
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    character = json.load(f)
+                    loadedCharacters.append(character)
+                    print(f"Successfully loaded character from: {path}")
+                    break
+    
+    return loadedCharacters
+```
+
+### 2. Personality Generation
+
+```python chatbot.py
+def process_character_config(character: Dict[str, Any]) -> str:
+    """Process character configuration into agent personality."""
+    # Extract core character elements
+    bio = "\n".join([f"- {item}" for item in character.get('bio', [])])
+    lore = "\n".join([f"- {item}" for item in character.get('lore', [])])
+    knowledge = "\n".join([f"- {item}" for item in character.get('knowledge', [])])
+    topics = "\n".join([f"- {item}" for item in character.get('topics', [])])
+    kol_list = "\n".join([f"- {item}" for item in character.get('kol_list', [])])
+    style_all = "\n".join([f"- {item}" for item in character.get('style', {}).get('all', [])])
+    adjectives = "\n".join([f"- {item}" for item in character.get('adjectives', [])])
+    
+    # Select and format post examples
+    all_posts = character.get('postExamples', [])
+    selected_posts = random.sample(all_posts, min(10, len(all_posts)))
+    post_examples = "\n".join([
+        f"Example {i+1}: {post}"
+        for i, post in enumerate(selected_posts)
+        if isinstance(post, str) and post.strip()
+    ])
+    
+    personality = f"""
+    Here are examples of your previous posts:
+    <post_examples>
+    {post_examples}
+    </post_examples>
+    
+    You are an AI character designed to interact on social media with this configuration:
+    
+    <character_bio>
+    {bio}
+    </character_bio>
+    
+    <character_lore>
+    {lore}
+    </character_lore>
+    
+    <character_knowledge>
+    {knowledge}
+    </character_knowledge>
+    
+    <character_adjectives>
+    {adjectives}
+    </character_adjectives>
+    
+    <kol_list>
+    {kol_list}
+    </kol_list>
+    
+    <style_guidelines>
+    {style_all}
+    </style_guidelines>
+    
+    <topics>
+    {topics}
+    </topics>
+    """
+    
+    return personality
+```
+
+### 3. Configuration Object
+
+```python chatbot.py
+config = {
+    "configurable": {
+        "thread_id": f"{character['name']} Agent",
+        "character": character["name"],
+        "recursion_limit": 100,
+        "checkpoint_id": checkpoint_id,
+    },
+    "character": {
+        "name": character["name"],
+        "bio": character.get("bio", []),
+        "lore": character.get("lore", []),
+        "knowledge": character.get("knowledge", []),
+        "style": character.get("style", {}),
+        "messageExamples": character.get("messageExamples", []),
+        "postExamples": character.get("postExamples", []),
+        "kol_list": character.get("kol_list", []),
+        "accountid": character.get("accountid")
+    }
+}
+```
+
+## Using Character Files
+
+### Loading a Character
+
+Specify the character file via environment variable:
+
+```bash .env
+CHARACTER_FILE=chainyoda.json
+```
+
+Or provide multiple characters:
+
+```bash .env
+CHARACTER_FILE=character1.json,character2.json
+```
+
+### Creating a New Character
+
+1. **Copy the template:**
+   ```bash
+   cp characters/template.json characters/mycharacter.json
+   ```
+
+2. **Edit the configuration:**
+   ```json characters/mycharacter.json
+   {
+     "name": "MyBot",
+     "accountid": "your_twitter_id",
+     "bio": [
+       "AI agent specialized in GPU compute",
+       "Helps developers rent and manage cloud GPUs"
+     ],
+     "lore": [
+       "Believes in democratizing access to compute power",
+       "Passionate about making AI infrastructure accessible"
+     ],
+     "knowledge": [
+       "Expert in GPU compute and cloud infrastructure",
+       "Deep understanding of Hyperbolic platform",
+       "Familiar with common ML/AI workloads"
+     ],
+     "style": {
+       "all": [
+         "helpful and informative",
+         "explains technical concepts clearly",
+         "focuses on practical solutions"
+       ]
+     },
+     "topics": [
+       "gpu_compute",
+       "machine_learning",
+       "cloud_infrastructure"
+     ]
+   }
+   ```
+
+3. **Set the environment variable:**
+   ```bash .env
+   CHARACTER_FILE=mycharacter.json
+   ```
+
+4. **Run the agent:**
+   ```bash
+   poetry run python chatbot.py
+   ```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Bio & Lore">
+    - **Bio**: Focus on factual background and credentials
+    - **Lore**: Include beliefs, values, and worldview
+    - Keep entries concise (1-2 sentences each)
+    - Use consistent voice and perspective
+  </Accordion>
+  
+  <Accordion title="Knowledge Base">
+    - List specific domains of expertise
+    - Include both broad and specific knowledge areas
+    - Mention relevant technical skills
+    - Add personality quirks if desired (e.g., "loves to find ironies")
+  </Accordion>
+  
+  <Accordion title="Style Guidelines">
+    - Be specific about communication patterns
+    - Include length preferences ("under 45 chars")
+    - Specify emoji usage policies
+    - Define technical depth vs accessibility balance
+    - Mention vocabulary preferences ("crypto vernacular")
+  </Accordion>
+  
+  <Accordion title="Post Examples">
+    - Include 50-1000+ examples for best results
+    - Use actual posts from the persona you're emulating
+    - Vary topics and formats
+    - The framework randomly samples 10 examples per interaction
+  </Accordion>
+  
+  <Accordion title="KOL List">
+    - Include relevant accounts for your niche
+    - Get user IDs from Twitter/X developer tools
+    - 5-20 KOLs is a good starting point
+    - Agent will randomly select from this list
+  </Accordion>
+  
+  <Accordion title="Topics">
+    - List 5-15 relevant topics
+    - Use consistent naming (lowercase, underscores)
+    - Focus on agent's areas of expertise
+    - Used for content filtering and generation
+  </Accordion>
+</AccordionGroup>
+
+## Character File Locations
+
+The framework searches for character files in these locations (in order):
+
+1. Exact path specified in `CHARACTER_FILE`
+2. `characters/{CHARACTER_FILE}`
+3. `{script_directory}/characters/{CHARACTER_FILE}`
+
+## Advanced Configuration
+
+### Multiple Characters
+
+Load multiple characters for ensemble agents:
+
+```bash .env
+CHARACTER_FILE=character1.json,character2.json,character3.json
+```
+
+```python chatbot.py
+characters = loadCharacters(os.getenv("CHARACTER_FILE"))
+character = characters[0]  # Uses first character by default
+```
+
+### Dynamic Personality Modification
+
+Modify character personality at runtime:
+
+```python
+# Load base character
+character = loadCharacters("base.json")[0]
+
+# Add dynamic elements
+character["bio"].append("Currently focused on GPU compute automation")
+character["knowledge"].append(f"Active since {datetime.now().strftime('%Y-%m-%d')}")
+
+# Process modified character
+personality = process_character_config(character)
+```
+
+### Context-Specific Styles
+
+Define different styles for different contexts:
+
+```json
+"style": {
+  "all": [
+    "friendly and approachable",
+    "technically accurate"
+  ],
+  "chat": [
+    "more detailed explanations",
+    "asks clarifying questions"
+  ],
+  "post": [
+    "extremely concise",
+    "under 280 characters",
+    "optimized for engagement"
+  ],
+  "technical": [
+    "uses precise terminology",
+    "includes code examples when relevant"
+  ]
+}
+```
+
+## Environment Integration
+
+Character configuration works with environment settings:
+
+```bash .env
+# Character
+CHARACTER_FILE=mybot.json
+
+# Twitter (uses character.accountid)
+TWITTER_USERNAME=mybot_username
+
+# Enable features based on character
+USE_TWITTER_CORE=true
+USE_HYPERBOLIC_TOOLS=true
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Character file not found">
+    - Check the file path is correct
+    - Ensure the file is in the `characters/` directory
+    - Verify JSON syntax is valid
+    - Check file permissions
+  </Accordion>
+  
+  <Accordion title="Invalid JSON">
+    - Use a JSON validator (jsonlint.com)
+    - Check for trailing commas
+    - Ensure all strings are quoted
+    - Verify brackets and braces match
+  </Accordion>
+  
+  <Accordion title="Character not behaving as expected">
+    - Add more post examples (50+ recommended)
+    - Make style guidelines more specific
+    - Review bio/lore/knowledge for conflicts
+    - Test with different prompts
+    - Check the processed personality in logs
+  </Accordion>
+  
+  <Accordion title="KOL interactions not working">
+    - Verify user IDs are correct (not usernames)
+    - Check Twitter API credentials
+    - Ensure USE_TWITTER_CORE=true
+    - Verify KOL accounts are public
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Understand the framework architecture
+  </Card>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    Learn about agent types and modes
+  </Card>
+  <Card title="Twitter Integration" icon="twitter" href="/tools/social/twitter-operations">
+    Set up Twitter automation
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get started building your agent
+  </Card>
+</CardGroup>

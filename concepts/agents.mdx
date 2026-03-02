@@ -1,0 +1,409 @@
+---
+title: Agents
+description: Understanding agent types, modes, and execution patterns in Hyperbolic AgentKit
+---
+
+## Overview
+
+Hyperbolic AgentKit supports multiple agent types and execution modes, each optimized for different use cases. All agents are powered by the ReAct (Reasoning and Acting) pattern via LangGraph.
+
+## Agent Architecture
+
+All agents in the framework are built using LangGraph's `create_react_agent`:
+
+```python chatbot.py
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import MemorySaver
+
+# Create ReAct agent
+memory = MemorySaver()
+agent = create_react_agent(
+    llm=llm,                    # Language model (Claude, GPT, etc.)
+    tools=tools,                # Available tools/actions
+    checkpointer=memory,        # State persistence
+    state_modifier=personality, # Agent personality/instructions
+)
+```
+
+### ReAct Pattern
+
+The ReAct pattern enables agents to:
+1. **Reason**: Analyze the task and plan actions
+2. **Act**: Execute tools to gather information or perform operations
+3. **Observe**: Process tool results
+4. **Iterate**: Continue reasoning and acting until task completion
+
+<Note>
+The ReAct loop continues until the agent determines the task is complete or the recursion limit is reached (default: 100 iterations).
+</Note>
+
+## Agent Modes
+
+The framework supports three primary execution modes:
+
+### 1. Interactive Chat Mode
+
+One-on-one conversation with the agent via terminal.
+
+```python chatbot.py
+async def run_chat_mode(agent_executor, config, runnable_config):
+    """Run the agent interactively based on user input."""
+    print_system("Starting chat mode... Type 'exit' to end.")
+    
+    while True:
+        user_input = input(f"{Colors.BLUE}{Colors.BOLD}User: {Colors.ENDC}")
+        
+        if user_input.lower() == "exit":
+            break
+        
+        async for chunk in agent_executor.astream(
+            {"messages": [HumanMessage(content=user_input)]},
+            runnable_config
+        ):
+            if "agent" in chunk:
+                response = chunk["agent"]["messages"][0].content
+                print_ai(format_ai_message_content(response))
+            elif "tools" in chunk:
+                print_system(chunk["tools"]["messages"][0].content)
+```
+
+**Use Cases:**
+- Testing and debugging
+- Direct interaction with GPU compute
+- Blockchain operations
+- General assistance tasks
+
+**Starting Chat Mode:**
+```bash
+poetry run python chatbot.py
+# Select option 1: Interactive chat mode
+```
+
+### 2. Twitter Automation Mode
+
+Autonomous agent that monitors Twitter mentions and interacts with KOLs.
+
+```python chatbot.py
+async def run_twitter_automation(agent_executor, config, runnable_config):
+    """Run the agent autonomously with specified intervals."""
+    print_system(f"Starting autonomous mode as {config['character']['name']}...")
+    twitter_state.load()
+    
+    while True:
+        # Check if enough time has passed since last check
+        if not twitter_state.can_check_mentions():
+            wait_time = MENTION_CHECK_INTERVAL - \
+                (datetime.now() - twitter_state.last_check_time).total_seconds()
+            if wait_time > 0:
+                await asyncio.sleep(wait_time)
+                continue
+        
+        # Update check time
+        twitter_state.last_check_time = datetime.now()
+        twitter_state.save()
+        
+        # Select KOLs for interaction
+        selected_kols = random.sample(config['character']['kol_list'], NUM_KOLS)
+        
+        # Create autonomous task prompt
+        thought = f"""
+        Task 1: Query podcast knowledge base and recent tweets
+        Task 2: Check for and reply to new Twitter mentions
+        Task 3: Interact with KOLs
+        """
+        
+        # Execute autonomous workflow
+        async for chunk in agent_executor.astream(
+            {"messages": [HumanMessage(content=thought)]},
+            runnable_config
+        ):
+            # Process results...
+        
+        # Wait before next cycle
+        await asyncio.sleep(MENTION_CHECK_INTERVAL)
+```
+
+**Autonomous Workflow:**
+1. Query knowledge bases for context
+2. Check for new Twitter mentions
+3. Reply to relevant mentions
+4. Interact with KOLs (Key Opinion Leaders)
+5. Create original tweets
+6. Wait for next cycle
+
+**Configuration:**
+```python twitter_agent/twitter_state.py
+MENTION_CHECK_INTERVAL = 1800  # 30 minutes
+MAX_MENTIONS_PER_INTERVAL = 10
+```
+
+**Starting Automation Mode:**
+```bash
+poetry run python chatbot.py
+# Select option 2: Character Twitter Automation
+```
+
+### 3. Voice Agent Mode
+
+Real-time voice interaction via web interface using OpenAI's Realtime API.
+
+```python server/src/server/app.py
+from openai_voice_react_agent import OpenAIVoiceReactAgent
+
+# Create voice agent
+agent = OpenAIVoiceReactAgent(
+    model="gpt-4o-realtime-preview",
+    tools=TOOLS,
+    instructions=full_instructions,
+    voice="verse"  # Options: alloy, ash, ballad, coral, echo, sage, shimmer, verse
+)
+
+# WebSocket endpoint for voice streaming
+@app.websocket_route("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    
+    # Stream voice input/output
+    async for message in websocket.iter_text():
+        # Process voice input and stream response
+        await agent.process_voice(message, websocket)
+```
+
+**Features:**
+- Real-time voice-to-voice interaction
+- WebSocket-based streaming
+- Multiple voice options
+- Same tool access as text agents
+
+**Starting Voice Mode:**
+```bash
+PYTHONPATH=$PWD/server/src poetry run python server/src/server/app.py
+# Open browser to http://localhost:3000
+```
+
+## Agent Configuration
+
+### Runnable Configuration
+
+Each agent mode uses a `RunnableConfig` for execution parameters:
+
+```python chatbot.py
+runnable_config = RunnableConfig(
+    recursion_limit=200,  # Maximum ReAct iterations
+    configurable={
+        "thread_id": f"{character['name']} Agent",
+        "langgraph_checkpoint_ns": "chat_mode",
+        "langgraph_checkpoint_id": config["configurable"]["langgraph_checkpoint_id"]
+    }
+)
+```
+
+**Key Parameters:**
+- `recursion_limit`: Max iterations before stopping (prevents infinite loops)
+- `thread_id`: Conversation identifier for state persistence
+- `checkpoint_id`: Unique ID for state snapshots
+- `checkpoint_ns`: Namespace for organizing checkpoints
+
+### Character Configuration
+
+Agents are configured via JSON character files:
+
+```python chatbot.py
+config = {
+    "configurable": {
+        "thread_id": f"{character['name']} Agent",
+        "character": character["name"],
+        "recursion_limit": 100,
+        "checkpoint_id": checkpoint_id,
+    },
+    "character": {
+        "name": character["name"],
+        "bio": character.get("bio", []),
+        "lore": character.get("lore", []),
+        "knowledge": character.get("knowledge", []),
+        "style": character.get("style", {}),
+        "messageExamples": character.get("messageExamples", []),
+        "postExamples": character.get("postExamples", []),
+        "kol_list": character.get("kol_list", []),
+        "accountid": character.get("accountid")
+    }
+}
+```
+
+See [Character Configuration](/concepts/character-configuration) for details.
+
+## State Management
+
+### Conversation State
+
+LangGraph's `MemorySaver` maintains conversation history:
+
+```python
+memory = MemorySaver()
+agent = create_react_agent(
+    llm,
+    tools=tools,
+    checkpointer=memory,  # Enables state persistence
+    state_modifier=personality,
+)
+```
+
+### Twitter State
+
+Tracks interactions to prevent duplicates:
+
+```python twitter_agent/twitter_state.py
+class TwitterState:
+    def __init__(self):
+        self.replied_tweets = set()
+        self.reposted_tweets = set()
+        self.last_mention_id = None
+        self.last_check_time = None
+    
+    def has_replied_to(self, tweet_id: str) -> bool:
+        """Check if we've already replied to this tweet."""
+        return tweet_id in self.replied_tweets
+    
+    def add_replied_tweet(self, tweet_id: str) -> str:
+        """Mark a tweet as replied to."""
+        self.replied_tweets.add(tweet_id)
+        self.save()
+        return f"Added tweet {tweet_id} to replied database"
+```
+
+### Knowledge Base State
+
+Maintains embedded knowledge for context:
+
+```python chatbot.py
+# Twitter Knowledge Base
+knowledge_base = TweetKnowledgeBase()
+await update_knowledge_base(
+    twitter_client=twitter_client,
+    knowledge_base=knowledge_base,
+    kol_list=config['character']['kol_list']
+)
+
+# Podcast Knowledge Base
+podcast_knowledge_base = PodcastKnowledgeBase()
+podcast_knowledge_base.process_all_json_files()
+
+# Add to tools
+tools.append(Tool(
+    name="query_twitter_knowledge_base",
+    func=lambda query: knowledge_base.query_knowledge_base(query),
+    description="Query the Twitter knowledge base for relevant tweets"
+))
+```
+
+## Agent Capabilities by Mode
+
+| Capability | Chat Mode | Twitter Automation | Voice Mode |
+|------------|-----------|-------------------|------------|
+| GPU Compute | ✅ | ✅ | ✅ |
+| Blockchain Ops | ✅ | ✅ | ✅ |
+| Twitter Read | ✅ | ✅ | ✅ |
+| Twitter Post | ✅ | ✅ | ❌* |
+| Knowledge Base | ✅ | ✅ | ✅ |
+| Browser Tools | ✅ | ✅ | ✅ |
+| Web Search | ✅ | ✅ | ✅ |
+| Voice I/O | ❌ | ❌ | ✅ |
+| Autonomous | ❌ | ✅ | ❌ |
+
+*Can be enabled but requires configuration
+
+## Streaming Responses
+
+All agent modes support streaming for real-time output:
+
+```python chatbot.py
+# Stream agent responses
+async for chunk in agent_executor.astream(
+    {"messages": [HumanMessage(content=user_input)]},
+    runnable_config
+):
+    if "agent" in chunk:
+        # Agent reasoning or final response
+        response = chunk["agent"]["messages"][0].content
+        print_ai(format_ai_message_content(response))
+    
+    elif "tools" in chunk:
+        # Tool execution results
+        tool_result = chunk["tools"]["messages"][0].content
+        print_system(tool_result)
+```
+
+**Chunk Types:**
+- `agent`: Contains reasoning or responses from the LLM
+- `tools`: Contains results from tool executions
+
+## Error Handling
+
+Agents implement graceful error handling:
+
+```python chatbot.py
+try:
+    async for chunk in agent_executor.astream(
+        {"messages": [HumanMessage(content=thought)]},
+        runnable_config
+    ):
+        # Process chunks
+        
+except KeyboardInterrupt:
+    print_system("\nSaving state and exiting...")
+    twitter_state.save()
+    sys.exit(0)
+    
+except Exception as e:
+    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Error type: {type(e).__name__}")
+    
+    # Continue after error in autonomous mode
+    print_system("Continuing after error...")
+    await asyncio.sleep(MENTION_CHECK_INTERVAL)
+```
+
+## Choosing an Agent Mode
+
+<AccordionGroup>
+  <Accordion title="When to use Chat Mode">
+    - Testing new tools or workflows
+    - Direct interaction with GPU compute
+    - Blockchain operations requiring confirmation
+    - Debugging agent behavior
+    - General assistance tasks
+  </Accordion>
+  
+  <Accordion title="When to use Twitter Automation">
+    - Running a Twitter bot
+    - Automated social media marketing
+    - Community engagement
+    - KOL interaction campaigns
+    - Content distribution
+  </Accordion>
+  
+  <Accordion title="When to use Voice Mode">
+    - Voice-based interfaces
+    - Accessibility requirements
+    - Hands-free operation
+    - Real-time conversation
+    - Customer service applications
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Understand the framework architecture
+  </Card>
+  <Card title="Tools" icon="wrench" href="/concepts/tools">
+    Learn about available tools and actions
+  </Card>
+  <Card title="Character Configuration" icon="user" href="/concepts/character-configuration">
+    Configure your agent's personality
+  </Card>
+  <Card title="Twitter Integration" icon="twitter" href="/tools/social/twitter-operations">
+    Set up Twitter automation
+  </Card>
+</CardGroup>

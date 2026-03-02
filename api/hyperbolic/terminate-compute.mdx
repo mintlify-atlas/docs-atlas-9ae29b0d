@@ -1,0 +1,101 @@
+---
+title: "Terminate Compute"
+description: "Terminate a GPU instance on the Hyperbolic platform"
+---
+
+## Overview
+
+The `terminate_compute` action allows you to terminate a GPU instance on the Hyperbolic platform. Once terminated, the instance will no longer be accessible and billing will stop.
+
+## Function Signature
+
+```python
+def terminate_compute(instance_id: str) -> str
+```
+
+## Input Schema
+
+<ParamField path="instance_id" type="string" required>
+  The ID of the instance to terminate (e.g., "respectful-rose-pelican"). You can get instance IDs using the `get_gpu_status` action.
+</ParamField>
+
+## Response
+
+Returns a formatted JSON string representation of the API response.
+
+<ResponseField name="response" type="string">
+  A formatted JSON string confirming the termination request, typically including the instance ID and new status.
+</ResponseField>
+
+## API Endpoint
+
+```
+POST https://api.hyperbolic.xyz/v1/marketplace/instances/terminate
+```
+
+## Example Usage
+
+```python
+from hyperbolic_agentkit_core.actions import terminate_compute
+
+# Terminate a specific instance
+result = terminate_compute(instance_id="respectful-rose-pelican")
+print(result)
+```
+
+## Example Response
+
+```json
+{
+  "id": "respectful-rose-pelican",
+  "status": "terminating",
+  "message": "Instance termination initiated"
+}
+```
+
+## Important Notes
+
+- The instance ID must be valid and currently active
+- **After termination, the instance will no longer be accessible**
+- Billing stops once the instance is terminated
+- You can get instance IDs using the `get_gpu_status` action
+- Requires `HYPERBOLIC_API_KEY` environment variable
+- This action is **irreversible** - terminated instances cannot be recovered
+
+## Error Handling
+
+The function raises:
+
+- `ValueError`: If instance_id is missing or invalid
+- `requests.exceptions.RequestException`: If the API request fails, with detailed error information including:
+  - HTTP status code
+  - API error messages
+  - Response content
+
+## Workflow Example
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    get_gpu_status,
+    terminate_compute
+)
+
+# 1. Get all running instances
+status = get_gpu_status()
+print(status)
+
+# 2. Terminate a specific instance
+instance_id = "respectful-rose-pelican"
+result = terminate_compute(instance_id=instance_id)
+print(f"Termination result: {result}")
+
+# 3. Verify termination
+status = get_gpu_status()
+print(f"Updated status: {status}")
+```
+
+## Related Actions
+
+- [Get GPU Status](/api/hyperbolic/get-gpu-status) - Get instance IDs and current status
+- [Rent Compute](/api/hyperbolic/rent-compute) - Rent new GPU instances
+- [Get Spend History](/api/hyperbolic/get-spend-history) - View billing for terminated instances

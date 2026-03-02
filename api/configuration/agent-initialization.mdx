@@ -1,0 +1,269 @@
+---
+title: "Agent Initialization"
+description: "Initialize the Hyperbolic AgentKit with tools and configuration"
+---
+
+## Overview
+
+The `initialize_agent()` function is the main entry point for setting up the Hyperbolic AgentKit. It initializes the LLM, character configuration, knowledge bases, and all available tools.
+
+## Function Signature
+
+```python
+async def initialize_agent() -> tuple[
+    AgentExecutor,
+    dict,
+    RunnableConfig
+]
+```
+
+## Returns
+
+<ResponseField name="agent_executor" type="AgentExecutor">
+  The initialized LangGraph ReAct agent with all configured tools.
+</ResponseField>
+
+<ResponseField name="config" type="dict">
+  Configuration dictionary containing character settings, thread ID, and checkpoint information.
+</ResponseField>
+
+<ResponseField name="runnable_config" type="RunnableConfig">
+  LangChain runnable configuration with recursion limits and checkpoint settings.
+</ResponseField>
+
+## Example Usage
+
+```python
+import asyncio
+from chatbot import initialize_agent
+
+async def main():
+    # Initialize the agent
+    agent_executor, config, runnable_config = await initialize_agent()
+    
+    # Access character information
+    character_name = config["character"]["name"]
+    print(f"Agent initialized as: {character_name}")
+    
+    # Use the agent
+    from langchain_core.messages import HumanMessage
+    
+    response = await agent_executor.astream(
+        {"messages": [HumanMessage(content="What GPUs are available?")]},
+        runnable_config
+    )
+    
+    async for chunk in response:
+        if "agent" in chunk:
+            print(chunk["agent"]["messages"][0].content)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Initialization Process
+
+The function performs the following steps:
+
+### 1. LLM Initialization
+
+```python
+llm = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+```
+
+### 2. Character Configuration
+
+Loads character configuration from JSON file specified in `CHARACTER_FILE` environment variable:
+
+```python
+characters = loadCharacters(os.getenv("CHARACTER_FILE"))
+character = characters[0]
+personality = process_character_config(character)
+```
+
+### 3. Wallet Provider Setup
+
+Configures Coinbase CDP wallet provider:
+
+```python
+wallet_provider = CdpWalletProvider(CdpWalletProviderConfig(
+    api_key_name=os.getenv("CDP_API_KEY_NAME"),
+    api_key_private=os.getenv("CDP_API_KEY_PRIVATE"),
+    network_id=os.getenv("CDP_NETWORK_ID", "base-mainnet"),
+    wallet_data=wallet_data
+))
+```
+
+### 4. AgentKit Initialization
+
+Sets up Coinbase AgentKit with action providers:
+
+```python
+agent_kit = AgentKit(AgentKitConfig(
+    wallet_provider=wallet_provider,
+    action_providers=[
+        cdp_api_action_provider(),
+        cdp_wallet_action_provider(),
+        erc20_action_provider(),
+        pyth_action_provider(),
+        wallet_action_provider(),
+        weth_action_provider(),
+        twitter_action_provider(),
+    ]
+))
+```
+
+### 5. Knowledge Base Setup
+
+Optionally initializes knowledge bases:
+
+- **Twitter Knowledge Base**: Scrapes tweets from KOLs
+- **Podcast Knowledge Base**: Processes podcast transcripts
+
+### 6. Tool Registration
+
+Registers tools based on environment configuration:
+
+```python
+tools = create_agent_tools(
+    llm,
+    knowledge_base,
+    podcast_knowledge_base,
+    agent_kit,
+    config
+)
+```
+
+### 7. Agent Creation
+
+Creates the LangGraph ReAct agent:
+
+```python
+memory = MemorySaver()
+return create_react_agent(
+    llm,
+    tools=tools,
+    checkpointer=memory,
+    state_modifier=personality,
+), config, runnable_config
+```
+
+## Configuration Structure
+
+The returned `config` dictionary contains:
+
+```python
+{
+    "configurable": {
+        "thread_id": "Agent Name",
+        "character": "character_name",
+        "recursion_limit": 100,
+        "checkpoint_id": "uuid-string",
+        "langgraph_checkpoint_id": "uuid-string"
+    },
+    "character": {
+        "name": "Character Name",
+        "bio": [...],
+        "lore": [...],
+        "knowledge": [...],
+        "style": {...},
+        "messageExamples": [...],
+        "postExamples": [...],
+        "kol_list": [...],
+        "accountid": "twitter_account_id"
+    }
+}
+```
+
+## Available Tools
+
+Tools are conditionally enabled based on environment variables:
+
+### Core Toolkits
+
+- **Coinbase Tools** (`USE_COINBASE_TOOLS=true`): Blockchain and wallet operations
+- **Hyperbolic Tools** (`USE_HYPERBOLIC_TOOLS=true`): GPU compute management
+- **Browser Tools** (`USE_BROWSER_TOOLS=true`): Web automation
+- **Twitter Core** (`USE_TWITTER_CORE=true`): Twitter API integration
+
+### Additional Tools
+
+- **Writing Agent** (`USE_WRITING_AGENT=true`): Content generation
+- **Web Search** (`USE_WEB_SEARCH=true`): DuckDuckGo search
+- **Request Tools** (`USE_REQUEST_TOOLS=true`): HTTP requests
+- **GitHub Tools** (`USE_GITHUB_TOOLS=true`): GitHub API integration
+
+### Twitter-Specific Tools
+
+- Tweet reply tracking (`USE_TWEET_REPLY_TRACKING=true`)
+- Tweet repost tracking (`USE_TWEET_REPOST_TRACKING=true`)
+- Tweet deletion (`USE_TWEET_DELETE=true`)
+- User ID lookup (`USE_USER_ID_LOOKUP=true`)
+- User tweets lookup (`USE_USER_TWEETS_LOOKUP=true`)
+- Retweet (`USE_RETWEET=true`)
+
+### Knowledge Bases
+
+- Twitter Knowledge Base (`USE_TWITTER_KNOWLEDGE_BASE=true`)
+- Podcast Knowledge Base (`USE_PODCAST_KNOWLEDGE_BASE=true`)
+
+## Error Handling
+
+```python
+try:
+    agent_executor, config, runnable_config = await initialize_agent()
+except Exception as e:
+    print(f"Failed to initialize agent: {e}")
+    sys.exit(1)
+```
+
+Common errors:
+
+- Missing required environment variables
+- Invalid character file path
+- API key authentication failures
+- Knowledge base initialization errors
+
+## Interactive Setup
+
+During initialization, the function prompts for:
+
+1. **Twitter Knowledge Base**: Initialize? Clear existing? Update with KOL tweets?
+2. **Podcast Knowledge Base**: Initialize? Process new transcripts?
+
+## Helper Functions
+
+### loadCharacters()
+
+Loads character configuration from JSON files:
+
+```python
+def loadCharacters(charactersArg: str) -> List[Dict[str, Any]]
+```
+
+### process_character_config()
+
+Processes character JSON into agent personality:
+
+```python
+def process_character_config(character: Dict[str, Any]) -> str
+```
+
+### create_agent_tools()
+
+Creates and returns list of tools based on configuration:
+
+```python
+def create_agent_tools(
+    llm,
+    knowledge_base,
+    podcast_knowledge_base,
+    agent_kit,
+    config
+) -> List[Tool]
+```
+
+## Related Documentation
+
+- [Character Schema](/api/configuration/character-schema) - Character configuration format
+- [Environment Variables](/api/configuration/environment-variables) - Required configuration

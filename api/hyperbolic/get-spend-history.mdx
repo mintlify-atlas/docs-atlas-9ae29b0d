@@ -1,0 +1,179 @@
+---
+title: "Get Spend History"
+description: "Retrieve and analyze your GPU rental spending history"
+---
+
+## Overview
+
+The `get_spend_history` action retrieves and analyzes your GPU rental spending history from the Hyperbolic platform. It provides detailed information about past rentals, costs, and usage statistics.
+
+## Function Signature
+
+```python
+def get_spend_history() -> str
+```
+
+## Input Schema
+
+This action takes no input parameters.
+
+## Response
+
+Returns a formatted analysis of your GPU rental spending.
+
+<ResponseField name="analysis" type="string">
+  A formatted string containing:
+  - List of all instances rented
+  - Duration of each rental in seconds
+  - Cost per rental in USD
+  - Total spending per GPU type
+  - Overall total spending
+</ResponseField>
+
+## API Endpoint
+
+```
+GET https://api.hyperbolic.xyz/v1/marketplace/instances/history
+```
+
+## Example Response
+
+```
+=== GPU Rental Spending Analysis ===
+
+Instance Rentals:
+- respectful-rose-pelican:
+  GPU: NVIDIA H100 (Count: 2)
+  Duration: 3600 seconds
+  Cost: $5.00
+- happy-blue-dolphin:
+  GPU: NVIDIA A100 (Count: 1)
+  Duration: 7200 seconds
+  Cost: $3.50
+
+GPU Type Statistics:
+
+NVIDIA H100:
+  Total Rentals: 2
+  Total Time: 3600 seconds
+  Total Cost: $5.00
+
+NVIDIA A100:
+  Total Rentals: 1
+  Total Time: 7200 seconds
+  Total Cost: $3.50
+
+Total Spending: $8.50
+```
+
+## Example Usage
+
+```python
+from hyperbolic_agentkit_core.actions import get_spend_history
+
+# Get spending history
+history = get_spend_history()
+print(history)
+```
+
+## Response Details
+
+The spending analysis includes:
+
+### Instance Rentals
+
+For each rented instance:
+- **Instance name**: Unique identifier for the rental
+- **GPU model**: Type of GPU used (e.g., NVIDIA H100, A100)
+- **GPU count**: Number of GPUs in the instance
+- **Duration**: Rental duration in seconds
+- **Cost**: Total cost in USD
+
+### GPU Type Statistics
+
+Aggregated by GPU model:
+- **Total Rentals**: Number of GPUs of this type rented
+- **Total Time**: Combined rental duration in seconds
+- **Total Cost**: Combined spending in USD
+
+### Summary
+
+- **Total Spending**: Overall spending across all rentals in USD
+
+## Cost Calculation
+
+Costs are calculated using the formula:
+
+```
+cost = (duration_hours × price_per_hour_in_cents) / 100
+```
+
+Where:
+- `duration_hours = duration_seconds / 3600`
+- `price_per_hour_in_cents` is from the instance pricing data
+- Result is converted to dollars by dividing by 100
+
+## Important Notes
+
+- Requires `HYPERBOLIC_API_KEY` environment variable
+- Returns "No rental history found." if you haven't rented any instances
+- All costs are in USD
+- Durations are in seconds for precision
+- Only includes **terminated instances** (active rentals appear in `get_gpu_status`)
+- Statistics are grouped by GPU model for easy analysis
+
+## Error Handling
+
+```python
+from hyperbolic_agentkit_core.actions import get_spend_history
+
+try:
+    history = get_spend_history()
+    print(history)
+except Exception as e:
+    print(f"Error retrieving spend history: {e}")
+```
+
+If the API request fails, returns:
+```
+Error retrieving spend history: [error details]
+```
+
+## Use Cases
+
+### Budget Tracking
+
+Monitor your GPU rental spending to stay within budget:
+
+```python
+history = get_spend_history()
+if "Total Spending: $" in history:
+    # Extract and check total
+    pass
+```
+
+### Usage Analysis
+
+Analyze which GPU types you use most:
+
+```python
+# The response includes per-GPU statistics
+history = get_spend_history()
+print(history)
+```
+
+### Cost Optimization
+
+Compare costs across different GPU types to optimize spending:
+
+```python
+# Review GPU Type Statistics section
+# Compare total cost vs. total time for different models
+```
+
+## Related Actions
+
+- [Get Current Balance](/api/hyperbolic/get-current-balance) - Check your current credit balance
+- [Get GPU Status](/api/hyperbolic/get-gpu-status) - View active rentals (not in history yet)
+- [Rent Compute](/api/hyperbolic/rent-compute) - Rent new GPU instances
+- [Terminate Compute](/api/hyperbolic/terminate-compute) - End active rentals

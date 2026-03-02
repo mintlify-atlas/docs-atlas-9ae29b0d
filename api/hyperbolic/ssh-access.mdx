@@ -1,0 +1,143 @@
+---
+title: "SSH Access"
+description: "Connect to a remote GPU server via SSH"
+---
+
+## Overview
+
+The `ssh_connect` action establishes an SSH connection to a remote GPU server. Once connected, all shell commands will automatically run on this server through the `remote_shell` action.
+
+## Function Signature
+
+```python
+def connect_ssh(
+    host: str,
+    username: str,
+    password: Optional[str] = None,
+    private_key_path: Optional[str] = None,
+    port: int = 22
+) -> str
+```
+
+## Input Schema
+
+<ParamField path="host" type="string" required>
+  The hostname or IP address of the remote server.
+</ParamField>
+
+<ParamField path="username" type="string" required>
+  SSH username for authentication.
+</ParamField>
+
+<ParamField path="password" type="string" optional>
+  SSH password for authentication. Optional if using key-based authentication.
+</ParamField>
+
+<ParamField path="private_key_path" type="string" optional>
+  Path to private key file for authentication. If not provided, uses `SSH_PRIVATE_KEY_PATH` from environment variables.
+</ParamField>
+
+<ParamField path="port" type="integer" default="22">
+  SSH port number. Defaults to 22.
+</ParamField>
+
+## Response
+
+Returns a connection status message.
+
+<ResponseField name="status" type="string">
+  A message indicating whether the SSH connection was successful or failed, with relevant details.
+</ResponseField>
+
+## Example Usage
+
+```python
+from hyperbolic_agentkit_core.actions import connect_ssh
+
+# Connect using private key (recommended)
+result = connect_ssh(
+    host="gpu-node-1.hyperbolic.xyz",
+    username="ubuntu",
+    private_key_path="~/.ssh/id_rsa",
+    port=2222
+)
+print(result)
+
+# Connect using password
+result = connect_ssh(
+    host="gpu-node-1.hyperbolic.xyz",
+    username="ubuntu",
+    password="your-password",
+    port=2222
+)
+print(result)
+```
+
+## SSH Key Configuration
+
+### Environment Variable
+
+Set the SSH private key path in your `.env` file:
+
+```bash
+SSH_PRIVATE_KEY_PATH=~/.ssh/id_rsa
+```
+
+### Supported Key Types
+
+- **RSA keys** (recommended and required for Hyperbolic)
+- ED25519 keys are **NOT supported** by Hyperbolic platform
+
+### Generating an RSA Key
+
+If you need to generate a new RSA key:
+
+```bash
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com"
+```
+
+### Adding Public Key to Hyperbolic
+
+1. Navigate to [Hyperbolic Settings](https://app.hyperbolic.xyz/settings)
+2. Add your RSA public key (`~/.ssh/id_rsa.pub`)
+3. This enables SSH access to rented GPU instances
+
+## Important Notes
+
+- After connecting, use the `remote_shell` action to execute commands on the server
+- Use the command `ssh_status` with `remote_shell` to check connection status
+- Connection remains active until explicitly disconnected or script ends
+- Only **one active SSH connection** is maintained at a time
+- Connecting to a new server will close any existing connection
+- Requires either password or private key for authentication
+
+## Workflow with Hyperbolic GPUs
+
+```python
+from hyperbolic_agentkit_core.actions import (
+    get_gpu_status,
+    connect_ssh,
+    execute_remote_command
+)
+
+# 1. Get GPU instance details
+status = get_gpu_status()
+# Extract host and port from ssh_command in response
+
+# 2. Connect to the GPU instance
+connect_ssh(
+    host="gpu-node-1.hyperbolic.xyz",
+    username="ubuntu",
+    port=2222
+)
+
+# 3. Run commands on the GPU
+execute_remote_command("nvidia-smi")
+execute_remote_command("python train.py")
+```
+
+## Related Actions
+
+- [Remote Shell](/api/hyperbolic/remote-shell) - Execute commands on connected server
+- [Get GPU Status](/api/hyperbolic/get-gpu-status) - Get SSH connection details for instances
+- [Rent Compute](/api/hyperbolic/rent-compute) - Rent GPU instances to connect to
